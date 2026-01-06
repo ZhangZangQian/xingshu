@@ -1,0 +1,108 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "鸿蒙宏自动化应用"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "鸿蒙宏主入口"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "鸿蒙宏"
+    },
+    {
+      "name": "permission_internet_reason",
+      "value": "需要网络权限以执行 HTTP 请求动作"
+    },
+    {
+      "name": "permission_wifi_reason",
+      "value": "需要获取网络信息以支持网络状态触发器"
+    },
+    {
+      "name": "permission_notification_reason",
+      "value": "需要通知权限以发送宏执行结果通知"
+    },
+    {
+      "name": "app_name",
+      "value": "鸿蒙宏"
+    },
+    {
+      "name": "macro_list_title",
+      "value": "我的宏"
+    },
+    {
+      "name": "execution_log_title",
+      "value": "执行日志"
+    },
+    {
+      "name": "settings_title",
+      "value": "设置"
+    },
+    {
+      "name": "add_macro",
+      "value": "添加宏"
+    },
+    {
+      "name": "edit_macro",
+      "value": "编辑宏"
+    },
+    {
+      "name": "delete_macro",
+      "value": "删除宏"
+    },
+    {
+      "name": "enable_macro",
+      "value": "启用宏"
+    },
+    {
+      "name": "disable_macro",
+      "value": "禁用宏"
+    },
+    {
+      "name": "trigger_macro",
+      "value": "手动触发"
+    },
+    {
+      "name": "macro_name",
+      "value": "宏名称"
+    },
+    {
+      "name": "macro_description",
+      "value": "描述"
+    },
+    {
+      "name": "save",
+      "value": "保存"
+    },
+    {
+      "name": "cancel",
+      "value": "取消"
+    },
+    {
+      "name": "confirm",
+      "value": "确定"
+    },
+    {
+      "name": "delete_confirm",
+      "value": "确认删除该宏？"
+    },
+    {
+      "name": "execution_success",
+      "value": "执行成功"
+    },
+    {
+      "name": "execution_failed",
+      "value": "执行失败"
+    },
+    {
+      "name": "no_macros",
+      "value": "暂无宏，点击右下角按钮添加"
+    },
+    {
+      "name": "no_logs",
+      "value": "暂无执行日志"
+    }
+  ]
+}

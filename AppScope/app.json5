@@ -1,0 +1,14 @@
+{
+  "app": {
+    "bundleName": "com.example.harmonymacro",
+    "vendor": "example",
+    "versionCode": 1000000,
+    "versionName": "1.0.0",
+    "icon": "$media:app_icon",
+    "label": "$string:app_name",
+    "description": "$string:app_description",
+    "minAPIVersion": 21,
+    "targetAPIVersion": 21,
+    "apiReleaseType": "Release1"
+  }
+}
