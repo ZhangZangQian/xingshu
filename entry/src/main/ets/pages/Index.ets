@@ -127,95 +127,113 @@ struct Index {
     });
   }
 
+  /**
+   * 跳转到全局变量管理页
+   */
+  private handleNavigateToGlobalVariables() {
+    router.pushUrl({
+      url: 'pages/GlobalVariables'
+    });
+  }
+
   build() {
-    Column() {
-      // 顶部标题栏
-      Row() {
-        Text('鸿蒙宏')
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .flexGrow(1)
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      // 主内容区
+      Column() {
+        // 顶部标题栏
+        Row() {
+          Text('鸿蒙宏')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .flexGrow(1)
 
-        Button('执行日志')
-          .fontSize(14)
-          .height(36)
-          .onClick(() => {
-            this.handleNavigateToLog();
-          })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-      .backgroundColor('#ffffff')
-
-      // 宏列表
-      if (this.loading) {
-        Column() {
-          Text('加载中...')
-            .fontSize(16)
-            .fontColor('#999999')
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-      } else if (this.macros.length === 0) {
-        Column() {
-          Text('暂无宏')
-            .fontSize(16)
-            .fontColor('#999999')
-            .margin({ bottom: 8 })
-
-          Text('点击右下角按钮添加')
+          Button('全局变量')
             .fontSize(14)
-            .fontColor('#cccccc')
+            .height(36)
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.handleNavigateToGlobalVariables();
+            })
+
+          Button('执行日志')
+            .fontSize(14)
+            .height(36)
+            .onClick(() => {
+              this.handleNavigateToLog();
+            })
         }
         .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-      } else {
-        Scroll() {
-          Column({ space: 0 }) {
-            ForEach(this.macros, (macro: Macro) => {
-              MacroCard({
-                macro: macro,
-                onToggle: (id: number, enabled: boolean) => {
-                  this.handleToggleMacro(id, enabled);
-                },
-                onTrigger: (id: number) => {
-                  this.handleTriggerMacro(id);
-                },
-                onEdit: (id: number) => {
-                  this.handleEditMacro(id);
-                },
-                onDelete: (id: number) => {
-                  this.handleDeleteMacro(id);
-                }
-              })
-            }, (macro: Macro) => macro.id.toString())
-          }
-          .padding(16)
-          .width('100%')
-        }
-        .flexGrow(1)
-        .scrollBar(BarState.Auto)
-      }
+        .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+        .backgroundColor('#ffffff')
 
-      // 悬浮添加按钮
-      Stack({ alignContent: Alignment.BottomEnd }) {
-        Button('+')
-          .fontSize(32)
-          .width(56)
-          .height(56)
-          .borderRadius(28)
-          .margin({ right: 16, bottom: 16 })
-          .onClick(() => {
-            this.handleAddMacro();
-          })
+        // 宏列表
+        if (this.loading) {
+          Column() {
+            Text('加载中...')
+              .fontSize(16)
+              .fontColor('#999999')
+          }
+          .width('100%')
+          .flexGrow(1)
+          .justifyContent(FlexAlign.Center)
+        } else if (this.macros.length === 0) {
+          Column() {
+            Text('暂无宏')
+              .fontSize(16)
+              .fontColor('#999999')
+              .margin({ bottom: 8 })
+
+            Text('点击右下角按钮添加')
+              .fontSize(14)
+              .fontColor('#cccccc')
+          }
+          .width('100%')
+          .flexGrow(1)
+          .justifyContent(FlexAlign.Center)
+        } else {
+          Scroll() {
+            Column({ space: 0 }) {
+              ForEach(this.macros, (macro: Macro) => {
+                MacroCard({
+                  macro: macro,
+                  onToggle: (id: number, enabled: boolean) => {
+                    this.handleToggleMacro(id, enabled);
+                  },
+                  onTrigger: (id: number) => {
+                    this.handleTriggerMacro(id);
+                  },
+                  onEdit: (id: number) => {
+                    this.handleEditMacro(id);
+                  },
+                  onDelete: (id: number) => {
+                    this.handleDeleteMacro(id);
+                  }
+                })
+              }, (macro: Macro) => macro.id.toString())
+            }
+            .padding({ left: 16, right: 16, top: 16, bottom: 88 })
+            .width('100%')
+          }
+          .flexGrow(1)
+          .scrollBar(BarState.Auto)
+        }
       }
       .width('100%')
       .height('100%')
+      .backgroundColor('#f5f5f5')
+
+      // 悬浮添加按钮
+      Button('+')
+        .fontSize(32)
+        .width(56)
+        .height(56)
+        .borderRadius(28)
+        .margin({ right: 16, bottom: 16 })
+        .onClick(() => {
+          this.handleAddMacro();
+        })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#f5f5f5')
   }
 }

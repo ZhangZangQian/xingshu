@@ -113,8 +113,9 @@ export class MacroEngine {
         return false;
       }
 
-      // 2. 创建执行上下文
+      // 2. 创建执行上下文并加载变量
       const context = new ExecutionContextImpl(macroId, triggerType as TriggerType);
+      await context.loadVariables();
 
       // 3. 检查条件
       const conditions = await this.databaseService.getConditionsByMacroId(macroId);

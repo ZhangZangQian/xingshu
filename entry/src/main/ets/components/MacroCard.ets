@@ -1,18 +1,18 @@
 import { Macro } from '../models/Macro';
 
 /**
- * 宏卡片组件
+ * 宏卡片组�?
  */
 @Component
 export struct MacroCard {
   @Prop macro: Macro;
-  @Prop onToggle: (id: number, enabled: boolean) => void = () => {};
-  @Prop onTrigger: (id: number) => void = () => {};
-  @Prop onEdit: (id: number) => void = () => {};
-  @Prop onDelete: (id: number) => void = () => {};
+  onToggle: (id: number, enabled: boolean) => void = () => {};
+  onTrigger: (id: number) => void = () => {};
+  onEdit: (id: number) => void = () => {};
+  onDelete: (id: number) => void = () => {};
 
   build() {
-    Card() {
+    Column() {
       Column({ space: 12 }) {
         // 标题行
         Row() {
@@ -84,12 +84,14 @@ export struct MacroCard {
         .width('100%')
 
         // 更新时间
-        Text(`更新时间：${this.formatTime(this.macro.updatedAt)}`)
+        Text(`更新时间:${this.formatTime(this.macro.updatedAt)}`)
           .fontSize(12)
           .fontColor('#999999')
       }
       .padding(16)
       .width('100%')
+      .backgroundColor('#ffffff')
+      .borderRadius(8)
     }
     .margin({ bottom: 12 })
     .width('100%')

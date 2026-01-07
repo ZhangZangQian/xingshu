@@ -1,4 +1,5 @@
 import { Macro, MacroInput, Trigger, Action, TriggerType, ActionType, TimeTriggerConfig, NetworkTriggerConfig, HttpHeaders } from '../models/Macro';
+import { Variable, VariableScope, VariableType } from '../models/Variable';
 import { DatabaseService } from '../services/DatabaseService';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
@@ -6,7 +7,7 @@ import router from '@ohos.router';
 
 /**
  * 宏编辑页（完整版）
- * 支持基本信息、触发器、动作配置
+ * 支持基本信息、触发器、动作、变量配置
  */
 @Entry
 @Component
@@ -17,6 +18,13 @@ struct MacroEditor {
   @State isEditMode: boolean = false;
   @State triggers: Trigger[] = [];
   @State actions: Action[] = [];
+  @State variables: Variable[] = [];
+  @State showVariableEditor: boolean = false;
+  @State isVariableEditMode: boolean = false;
+  @State editingVariableIndex: number = -1;
+  @State varEditorName: string = '';
+  @State varEditorType: VariableType = VariableType.STRING;
+  @State varEditorValue: string = '';
 
   private macroId: number = 0;
   private databaseService: DatabaseService = DatabaseService.getInstance();
@@ -43,9 +51,10 @@ struct MacroEditor {
         this.macroEnabled = macro.enabled;
       }
 
-      // 加载触发器和动作
+      // 加载触发器、动作和变量
       this.triggers = await this.databaseService.getTriggersByMacroId(this.macroId);
       this.actions = await this.databaseService.getActionsByMacroId(this.macroId);
+      this.variables = await this.databaseService.getVariablesByMacroId(this.macroId);
 
     } catch (error) {
       Logger.error('MacroEditor', 'Failed to load macro', error as Error);
@@ -122,6 +131,19 @@ struct MacroEditor {
             type: action.type,
             config: action.config,
             orderIndex: action.orderIndex
+          });
+        }
+
+        // 保存变量
+        for (const variable of this.variables) {
+          await this.databaseService.insertVariable({
+            scope: VariableScope.MACRO,
+            macroId: this.macroId,
+            name: variable.name,
+            type: variable.type,
+            value: variable.value,
+            createdAt: now,
+            updatedAt: now
           });
         }
 
@@ -513,6 +535,136 @@ struct MacroEditor {
     return actionNames[action.type] || action.type;
   }
 
+  // ==================== 变量管理 ====================
+
+  /**
+   * 添加宏变量
+   */
+  private handleAddVariable() {
+    this.isVariableEditMode = false;
+    this.editingVariableIndex = -1;
+    this.varEditorName = '';
+    this.varEditorType = VariableType.STRING;
+    this.varEditorValue = '';
+    this.showVariableEditor = true;
+  }
+
+  /**
+   * 编辑宏变量
+   */
+  private handleEditVariable(variable: Variable, index: number) {
+    this.isVariableEditMode = true;
+    this.editingVariableIndex = index;
+    this.varEditorName = variable.name;
+    this.varEditorType = variable.type;
+    this.varEditorValue = this.formatVariableValueForInput(variable);
+    this.showVariableEditor = true;
+  }
+
+  /**
+   * 格式化变量值用于输入
+   */
+  private formatVariableValueForInput(variable: Variable): string {
+    if (variable.type === VariableType.BOOLEAN) {
+      return variable.value ? 'true' : 'false';
+    }
+    return String(variable.value);
+  }
+
+  /**
+   * 保存宏变量
+   */
+  private handleSaveVariable() {
+    // 验证输入
+    if (!this.varEditorName || this.varEditorName.trim().length === 0) {
+      promptAction.showToast({ message: '请输入变量名称' });
+      return;
+    }
+
+    // 验证变量名格式
+    const namePattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+    if (!namePattern.test(this.varEditorName)) {
+      promptAction.showToast({ message: '变量名只能包含字母、数字、下划线，且不能以数字开头' });
+      return;
+    }
+
+    let value: string | number | boolean;
+
+    // 根据类型解析值
+    if (this.varEditorType === VariableType.STRING) {
+      value = this.varEditorValue;
+    } else if (this.varEditorType === VariableType.NUMBER) {
+      value = Number(this.varEditorValue);
+      if (isNaN(value)) {
+        promptAction.showToast({ message: '请输入有效的数字' });
+        return;
+      }
+    } else {
+      value = this.varEditorValue.toLowerCase() === 'true';
+    }
+
+    if (this.isVariableEditMode && this.editingVariableIndex >= 0) {
+      // 更新变量
+      this.variables[this.editingVariableIndex].name = this.varEditorName.trim();
+      this.variables[this.editingVariableIndex].type = this.varEditorType;
+      this.variables[this.editingVariableIndex].value = value;
+      this.variables[this.editingVariableIndex].updatedAt = Date.now();
+      promptAction.showToast({ message: '变量已更新' });
+    } else {
+      // 添加新变量
+      const variable: Variable = {
+        id: Date.now(),
+        scope: VariableScope.MACRO,
+        macroId: this.macroId,
+        name: this.varEditorName.trim(),
+        type: this.varEditorType,
+        value: value,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      this.variables.push(variable);
+      promptAction.showToast({ message: '变量已添加' });
+    }
+
+    this.showVariableEditor = false;
+  }
+
+  /**
+   * 取消编辑变量
+   */
+  private handleCancelVariableEdit() {
+    this.showVariableEditor = false;
+  }
+
+  /**
+   * 删除变量
+   */
+  private deleteVariable(index: number) {
+    this.variables.splice(index, 1);
+  }
+
+  /**
+   * 获取变量类型显示文本
+   */
+  private getVariableTypeLabel(type: VariableType): string {
+    const labels: Record<string, string> = {
+      'string': '文本',
+      'number': '数字',
+      'boolean': '布尔'
+    };
+    return labels[type] || type;
+  }
+
+  /**
+   * 格式化变量值显示
+   */
+  private formatVariableValue(variable: Variable): string {
+    if (variable.type === VariableType.BOOLEAN) {
+      return variable.value ? '是' : '否';
+    }
+    return String(variable.value);
+  }
+
   build() {
     Column() {
       // 顶部标题栏
@@ -768,8 +920,245 @@ struct MacroEditor {
           .backgroundColor('#ffffff')
           .borderRadius(8)
           .alignItems(HorizontalAlign.Start)
+
+          // 宏变量区域
+          Column({ space: 12 }) {
+            Row() {
+              Text('宏变量')
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .flexGrow(1)
+
+              Text('可选')
+                .fontSize(12)
+                .fontColor('#999999')
+            }
+            .width('100%')
+
+            // 变量编辑器
+            if (this.showVariableEditor) {
+              Column({ space: 16 }) {
+                Text(this.isVariableEditMode ? '编辑变量' : '添加变量')
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
+
+                // 变量名称
+                Column({ space: 8 }) {
+                  Text('变量名称 *')
+                    .fontSize(14)
+                    .fontColor('#666666')
+
+                  TextInput({ placeholder: '例如：counter', text: this.varEditorName })
+                    .fontSize(14)
+                    .onChange((value: string) => {
+                      this.varEditorName = value;
+                    })
+
+                  Text('只能包含字母、数字、下划线，且不能以数字开头')
+                    .fontSize(12)
+                    .fontColor('#999999')
+                }
+                .alignItems(HorizontalAlign.Start)
+                .width('100%')
+
+                // 变量类型
+                Column({ space: 8 }) {
+                  Text('变量类型 *')
+                    .fontSize(14)
+                    .fontColor('#666666')
+
+                  Row({ space: 8 }) {
+                    Button('文本')
+                      .fontSize(12)
+                      .height(28)
+                      .backgroundColor(this.varEditorType === VariableType.STRING ? '#007DFF' : '#f0f0f0')
+                      .fontColor(this.varEditorType === VariableType.STRING ? '#ffffff' : '#333333')
+                      .onClick(() => {
+                        this.varEditorType = VariableType.STRING;
+                        if (this.varEditorValue === 'true' || this.varEditorValue === 'false') {
+                          this.varEditorValue = '';
+                        }
+                      })
+                      .enabled(!this.isVariableEditMode)
+
+                    Button('数字')
+                      .fontSize(12)
+                      .height(28)
+                      .backgroundColor(this.varEditorType === VariableType.NUMBER ? '#007DFF' : '#f0f0f0')
+                      .fontColor(this.varEditorType === VariableType.NUMBER ? '#ffffff' : '#333333')
+                      .onClick(() => {
+                        this.varEditorType = VariableType.NUMBER;
+                        this.varEditorValue = '0';
+                      })
+                      .enabled(!this.isVariableEditMode)
+
+                    Button('布尔')
+                      .fontSize(12)
+                      .height(28)
+                      .backgroundColor(this.varEditorType === VariableType.BOOLEAN ? '#007DFF' : '#f0f0f0')
+                      .fontColor(this.varEditorType === VariableType.BOOLEAN ? '#ffffff' : '#333333')
+                      .onClick(() => {
+                        this.varEditorType = VariableType.BOOLEAN;
+                        this.varEditorValue = 'true';
+                      })
+                      .enabled(!this.isVariableEditMode)
+                  }
+                }
+                .alignItems(HorizontalAlign.Start)
+                .width('100%')
+
+                // 变量值
+                Column({ space: 8 }) {
+                  Text('变量值 *')
+                    .fontSize(14)
+                    .fontColor('#666666')
+
+                  if (this.varEditorType === VariableType.BOOLEAN) {
+                    // 布尔类型
+                    Row({ space: 8 }) {
+                      Button('false')
+                        .fontSize(12)
+                        .height(28)
+                        .backgroundColor(this.varEditorValue === 'false' ? '#007DFF' : '#f0f0f0')
+                        .fontColor(this.varEditorValue === 'false' ? '#ffffff' : '#333333')
+                        .onClick(() => {
+                          this.varEditorValue = 'false';
+                        })
+
+                      Button('true')
+                        .fontSize(12)
+                        .height(28)
+                        .backgroundColor(this.varEditorValue === 'true' ? '#007DFF' : '#f0f0f0')
+                        .fontColor(this.varEditorValue === 'true' ? '#ffffff' : '#333333')
+                        .onClick(() => {
+                          this.varEditorValue = 'true';
+                        })
+                    }
+                  } else if (this.varEditorType === VariableType.NUMBER) {
+                    // 数字类型
+                    TextInput({ placeholder: '例如：0', text: this.varEditorValue })
+                      .fontSize(14)
+                      .type(InputType.Number)
+                      .onChange((value: string) => {
+                        this.varEditorValue = value;
+                      })
+                  } else {
+                    // 文本类型
+                    TextInput({ placeholder: '例如：默认值', text: this.varEditorValue })
+                      .fontSize(14)
+                      .onChange((value: string) => {
+                        this.varEditorValue = value;
+                      })
+                  }
+                }
+                .alignItems(HorizontalAlign.Start)
+                .width('100%')
+
+                // 操作按钮
+                Row({ space: 8 }) {
+                  Button('取消')
+                    .fontSize(14)
+                    .height(32)
+                    .flexGrow(1)
+                    .backgroundColor('#f0f0f0')
+                    .fontColor('#333333')
+                    .onClick(() => {
+                      this.handleCancelVariableEdit();
+                    })
+
+                  Button('保存')
+                    .fontSize(14)
+                    .height(32)
+                    .flexGrow(1)
+                    .backgroundColor('#007DFF')
+                    .onClick(() => {
+                      this.handleSaveVariable();
+                    })
+                }
+                .width('100%')
+              }
+              .padding(12)
+              .backgroundColor('#e8f4ff')
+              .borderRadius(8)
+              .width('100%')
+            }
+
+            // 变量列表
+            if (this.variables.length === 0 && !this.showVariableEditor) {
+              Text('暂无宏变量')
+                .fontSize(14)
+                .fontColor('#999999')
+                .width('100%')
+                .textAlign(TextAlign.Center)
+                .padding(20)
+            } else if (!this.showVariableEditor) {
+              Column({ space: 8 }) {
+                ForEach(this.variables, (variable: Variable, index: number) => {
+                  Row({ space: 12 }) {
+                    Column({ space: 4 }) {
+                      Text(variable.name)
+                        .fontSize(16)
+                        .fontWeight(FontWeight.Medium)
+
+                      Row({ space: 8 }) {
+                        Text(this.getVariableTypeLabel(variable.type))
+                          .fontSize(12)
+                          .fontColor('#666666')
+
+                        Text(`值: ${this.formatVariableValue(variable)}`)
+                          .fontSize(12)
+                          .fontColor('#666666')
+                      }
+                    }
+                    .flexGrow(1)
+                    .alignItems(HorizontalAlign.Start)
+
+                    Row({ space: 8 }) {
+                      Button('编辑')
+                        .fontSize(14)
+                        .height(32)
+                        .backgroundColor('#f0f0f0')
+                        .fontColor('#333333')
+                        .onClick(() => {
+                          this.handleEditVariable(variable, index);
+                        })
+
+                      Button('删除')
+                        .fontSize(14)
+                        .height(32)
+                        .backgroundColor('#ff4444')
+                        .onClick(() => {
+                          this.deleteVariable(index);
+                        })
+                    }
+                  }
+                  .width('100%')
+                  .padding(12)
+                  .backgroundColor('#f5f5f5')
+                  .borderRadius(8)
+                }, (variable: Variable, index: number) => index.toString())
+              }
+              .width('100%')
+            }
+
+            // 添加变量按钮
+            if (!this.showVariableEditor) {
+              Button('+ 添加宏变量')
+                .width('100%')
+                .height(40)
+                .fontSize(16)
+                .backgroundColor('#007DFF')
+                .onClick(() => {
+                  this.handleAddVariable();
+                })
+            }
+          }
+          .padding(16)
+          .backgroundColor('#ffffff')
+          .borderRadius(8)
+          .alignItems(HorizontalAlign.Start)
         }
-        .padding(16)
+        .padding({ left: 16, right: 16, top: 16, bottom: 80 })
         .width('100%')
       }
       .flexGrow(1)

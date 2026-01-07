@@ -1,5 +1,7 @@
 import { TriggerType } from './Macro';
+import { Variable, VariableScope } from './Variable';
 import { ClipboardService } from '../services/ClipboardService';
+import { DatabaseService } from '../services/DatabaseService';
 
 /**
  * 宏执行上下文实现类
@@ -8,13 +10,36 @@ export class ExecutionContextImpl {
   macroId: number;
   triggerType: TriggerType;
   variables: Map<string, Object>;
+  globalVariables: Map<string, Object>;
+  macroVariables: Map<string, Object>;
   startTime: number;
 
   constructor(macroId: number, triggerType: TriggerType) {
     this.macroId = macroId;
     this.triggerType = triggerType;
     this.variables = new Map<string, Object>();
+    this.globalVariables = new Map<string, Object>();
+    this.macroVariables = new Map<string, Object>();
     this.startTime = Date.now();
+  }
+
+  /**
+   * 加载变量到上下文
+   */
+  async loadVariables(): Promise<void> {
+    const databaseService = DatabaseService.getInstance();
+
+    // 加载全局变量
+    const globalVars = await databaseService.getGlobalVariables();
+    for (const v of globalVars) {
+      this.globalVariables.set(v.name, v.value);
+    }
+
+    // 加载宏变量
+    const macroVars = await databaseService.getVariablesByMacroId(this.macroId);
+    for (const v of macroVars) {
+      this.macroVariables.set(v.name, v.value);
+    }
   }
 
   /**
@@ -25,10 +50,31 @@ export class ExecutionContextImpl {
   }
 
   /**
-   * 获取变量
+   * 获取变量 (三级解析: system → macro → global)
    */
-  getVariable(name: string): Object | undefined {
-    return this.variables.get(name);
+  async getVariable(name: string): Promise<Object | undefined> {
+    // 1. 先查找系统变量
+    const systemValue = await this.getSystemVariable(name);
+    if (systemValue !== undefined) {
+      return systemValue;
+    }
+
+    // 2. 再查找运行期变量
+    if (this.variables.has(name)) {
+      return this.variables.get(name);
+    }
+
+    // 3. 再查找宏变量
+    if (this.macroVariables.has(name)) {
+      return this.macroVariables.get(name);
+    }
+
+    // 4. 最后查找全局变量
+    if (this.globalVariables.has(name)) {
+      return this.globalVariables.get(name);
+    }
+
+    return undefined;
   }
 
   /**

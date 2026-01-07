@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(cat:*)",
+      "Bash(powershell -Command:*)",
+      "WebFetch(domain:blog.csdn.net)",
+      "WebFetch(domain:developer.aliyun.com)",
+      "WebFetch(domain:segmentfault.com)",
+      "Skill(codeagent)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

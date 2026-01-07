@@ -1,5 +1,15 @@
 import relationalStore from '@ohos.data.relationalStore';
 import { Macro, Trigger, Action, Condition, ExecutionLog } from '../models/Macro';
+import {
+  Variable,
+  VariableInput,
+  VariableScope,
+  VariableType,
+  VariableValue,
+  serializeVariableValue,
+  deserializeVariableValue,
+  ensureVariableValueType
+} from '../models/Variable';
 import Logger from '../utils/Logger';
 
 /**
@@ -133,6 +143,24 @@ export class DatabaseService {
       `CREATE INDEX IF NOT EXISTS idx_log_macro_id ON execution_log(macro_id)`,
       `CREATE INDEX IF NOT EXISTS idx_log_executed_at ON execution_log(executed_at DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_log_status ON execution_log(status)`,
+
+      // 变量表
+      `CREATE TABLE IF NOT EXISTS variable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scope TEXT NOT NULL CHECK(scope IN ('global', 'macro')),
+        macro_id INTEGER,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('string', 'number', 'boolean')),
+        value TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (macro_id) REFERENCES macro(id) ON DELETE CASCADE,
+        UNIQUE(scope, macro_id, name)
+      )`,
+
+      // 创建索引
+      `CREATE INDEX IF NOT EXISTS idx_variable_scope ON variable(scope)`,
+      `CREATE INDEX IF NOT EXISTS idx_variable_macro_id ON variable(macro_id)`,
 
       // 数据库版本表
       `CREATE TABLE IF NOT EXISTS db_version (
@@ -625,5 +653,243 @@ export class DatabaseService {
       executedAt: resultSet.getLong(resultSet.getColumnIndex('executed_at')),
       duration: resultSet.getLong(resultSet.getColumnIndex('duration'))
     };
+  }
+
+  // ==================== 变量 CRUD ====================
+
+  /**
+   * 创建变量
+   */
+  async insertVariable(variable: VariableInput): Promise<number> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    if (variable.scope === VariableScope.MACRO && variable.macroId === undefined) {
+      throw new Error('宏变量必须指定宏 ID');
+    }
+
+    const existing = await this.getVariableByName(variable.name, variable.scope, variable.macroId);
+    if (existing) {
+      throw new Error('变量名已存在');
+    }
+
+    ensureVariableValueType(variable.type, variable.value);
+
+    const valueBucket: relationalStore.ValuesBucket = {
+      scope: variable.scope,
+      macro_id: variable.scope === VariableScope.MACRO ? variable.macroId : null,
+      name: variable.name,
+      type: variable.type,
+      value: serializeVariableValue(variable.value),
+      created_at: variable.createdAt,
+      updated_at: variable.updatedAt
+    };
+
+    try {
+      const rowId = await this.store.insert('variable', valueBucket);
+      Logger.info('DatabaseService', `Variable created with id: ${rowId}`);
+      return rowId as number;
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to insert variable', error as Error);
+      if (this.isUniqueConstraintError(error as Error)) {
+        throw new Error('变量名已存在');
+      }
+      throw new Error(`创建变量失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 查询所有全局变量
+   */
+  async getGlobalVariables(): Promise<Variable[]> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('variable');
+    predicates.equalTo('scope', VariableScope.GLOBAL);
+    predicates.orderByAsc('name');
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      const variables: Variable[] = [];
+
+      while (resultSet.goToNextRow()) {
+        variables.push(this.parseVariableFromResultSet(resultSet));
+      }
+
+      resultSet.close();
+      return variables;
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to get global variables', error as Error);
+      throw new Error(`查询全局变量失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 查询宏变量
+   */
+  async getVariablesByMacroId(macroId: number): Promise<Variable[]> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('variable');
+    predicates.equalTo('scope', VariableScope.MACRO);
+    predicates.equalTo('macro_id', macroId);
+    predicates.orderByAsc('name');
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      const variables: Variable[] = [];
+
+      while (resultSet.goToNextRow()) {
+        variables.push(this.parseVariableFromResultSet(resultSet));
+      }
+
+      resultSet.close();
+      return variables;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to get variables for macro ${macroId}`, error as Error);
+      throw new Error(`查询宏变量失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 按名称查询变量
+   */
+  async getVariableByName(name: string, scope: VariableScope, macroId?: number): Promise<Variable | null> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('variable');
+    predicates.equalTo('name', name);
+    predicates.equalTo('scope', scope);
+
+    if (scope === VariableScope.MACRO) {
+      if (macroId === undefined) {
+        throw new Error('宏变量必须指定宏 ID');
+      }
+      predicates.equalTo('macro_id', macroId);
+    }
+
+    try {
+      const resultSet = await this.store.query(predicates);
+
+      if (resultSet.goToFirstRow()) {
+        const variable = this.parseVariableFromResultSet(resultSet);
+        resultSet.close();
+        return variable;
+      }
+
+      resultSet.close();
+      return null;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to get variable by name ${name}`, error as Error);
+      throw new Error(`查询变量失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 更新变量
+   */
+  async updateVariable(
+    id: number,
+    updates: Partial<Omit<Variable, 'id' | 'createdAt' | 'updatedAt'>>
+  ): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    if (updates.scope === VariableScope.MACRO && updates.macroId === undefined) {
+      throw new Error('宏变量必须指定宏 ID');
+    }
+
+    if (updates.value !== undefined && updates.type === undefined) {
+      throw new Error('更新变量时必须指定类型');
+    }
+
+    if (updates.type !== undefined && updates.value !== undefined) {
+      ensureVariableValueType(updates.type, updates.value);
+    }
+
+    const valueBucket: relationalStore.ValuesBucket = {};
+    if (updates.scope !== undefined) {
+      valueBucket.scope = updates.scope;
+      if (updates.scope === VariableScope.GLOBAL) {
+        valueBucket.macro_id = null;
+      }
+    }
+    if (updates.macroId !== undefined && updates.scope !== VariableScope.GLOBAL) {
+      valueBucket.macro_id = updates.macroId;
+    }
+    if (updates.name !== undefined) valueBucket.name = updates.name;
+    if (updates.type !== undefined) valueBucket.type = updates.type;
+    if (updates.value !== undefined) valueBucket.value = serializeVariableValue(updates.value);
+    valueBucket.updated_at = Date.now();
+
+    const predicates = new relationalStore.RdbPredicates('variable');
+    predicates.equalTo('id', id);
+
+    try {
+      await this.store.update(valueBucket, predicates);
+      Logger.info('DatabaseService', `Variable ${id} updated`);
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to update variable ${id}`, error as Error);
+      if (this.isUniqueConstraintError(error as Error)) {
+        throw new Error('变量名已存在');
+      }
+      throw new Error(`更新变量失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 删除变量
+   */
+  async deleteVariable(id: number): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('variable');
+    predicates.equalTo('id', id);
+
+    try {
+      await this.store.delete(predicates);
+      Logger.info('DatabaseService', `Variable ${id} deleted`);
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to delete variable ${id}`, error as Error);
+      throw new Error(`删除变量失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 从 ResultSet 解析变量对象
+   */
+  private parseVariableFromResultSet(resultSet: relationalStore.ResultSet): Variable {
+    const scope = resultSet.getString(resultSet.getColumnIndex('scope')) as VariableScope;
+    const type = resultSet.getString(resultSet.getColumnIndex('type')) as VariableType;
+    const rawValue = resultSet.getString(resultSet.getColumnIndex('value'));
+
+    let parsedValue: VariableValue;
+    try {
+      parsedValue = deserializeVariableValue(type, rawValue);
+    } catch (error) {
+      const name = resultSet.getString(resultSet.getColumnIndex('name'));
+      Logger.error('DatabaseService', `Failed to parse variable value for ${name}`, error as Error);
+      throw error;
+    }
+
+    const macroIdValue = resultSet.getLong(resultSet.getColumnIndex('macro_id'));
+    const macroId = scope === VariableScope.MACRO && macroIdValue !== 0 ? macroIdValue : undefined;
+
+    return {
+      id: resultSet.getLong(resultSet.getColumnIndex('id')),
+      scope: scope,
+      macroId: macroId,
+      name: resultSet.getString(resultSet.getColumnIndex('name')),
+      type: type,
+      value: parsedValue,
+      createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at')),
+      updatedAt: resultSet.getLong(resultSet.getColumnIndex('updated_at'))
+    };
+  }
+
+  /**
+   * 判断是否唯一约束错误
+   */
+  private isUniqueConstraintError(error: Error): boolean {
+    const message = error?.message ? error.message.toLowerCase() : '';
+    return message.includes('unique');
   }
 }

@@ -2,6 +2,7 @@
   "src": [
     "pages/Index",
     "pages/MacroEditor",
-    "pages/ExecutionLog"
+    "pages/ExecutionLog",
+    "pages/GlobalVariables"
   ]
 }
