@@ -11,13 +11,13 @@ export struct ActionConfigEditor {
   controller: CustomDialogController;
 
   // 要编辑的动作
-  @Link action: Action;
+  @Prop action: Action;
 
   // 是否是编辑模式（false 表示新建）
   isEditMode: boolean = false;
 
   // 可用变量列表
-  @Link availableVariables: VariableOption[];
+  @Prop availableVariables: VariableOption[];
 
   // 回调函数
   onSave?: (action: Action) => void;
@@ -41,9 +41,12 @@ export struct ActionConfigEditor {
    */
   private handleSave() {
     try {
+      console.info('[ActionConfigEditor] Starting save process');
+
       // 验证配置
       const errors = this.validateConfig();
       if (errors.length > 0) {
+        console.error('[ActionConfigEditor] Validation errors:', errors.join(', '));
         AlertDialog.show({
           title: '配置错误',
           message: errors.join('\n'),
@@ -55,12 +58,23 @@ export struct ActionConfigEditor {
         return;
       }
 
-      // 更新 action 的 config
-      this.action.config = JSON.stringify(this.configData);
+      // 创建新的 action 对象（不能直接修改 @Prop 变量）
+      const updatedAction: Action = {
+        id: this.action.id,
+        macroId: this.action.macroId,
+        type: this.action.type,
+        config: JSON.stringify(this.configData),
+        orderIndex: this.action.orderIndex
+      };
+
+      console.info('[ActionConfigEditor] Updated action created:', JSON.stringify(updatedAction));
 
       // 调用回调
       if (this.onSave) {
-        this.onSave(this.action);
+        console.info('[ActionConfigEditor] Calling onSave callback');
+        this.onSave(updatedAction);
+      } else {
+        console.warn('[ActionConfigEditor] onSave callback is not defined!');
       }
 
       // 关闭对话框
@@ -212,38 +226,24 @@ export struct ActionConfigEditor {
    */
   @Builder
   buildFormContent() {
-    switch (this.action.type) {
-      case ActionType.CLIPBOARD_READ:
-      case ActionType.CLIPBOARD_WRITE:
-        this.buildClipboardForm();
-        break;
-
-      case ActionType.TEXT_PROCESS:
-        this.buildTextProcessForm();
-        break;
-
-      case ActionType.HTTP_REQUEST:
-        this.buildHttpRequestForm();
-        break;
-
-      case ActionType.USER_DIALOG:
-        this.buildUserDialogForm();
-        break;
-
-      case ActionType.OPEN_URL:
-        this.buildOpenUrlForm();
-        break;
-
-      case ActionType.NOTIFICATION:
-        this.buildNotificationForm();
-        break;
-
-      default:
-        Text('暂不支持此动作类型的配置')
-          .fontSize(14)
-          .fontColor('#999999')
-          .textAlign(TextAlign.Center)
-          .padding(40);
+    if (this.action.type === ActionType.CLIPBOARD_READ || this.action.type === ActionType.CLIPBOARD_WRITE) {
+      this.buildClipboardForm();
+    } else if (this.action.type === ActionType.TEXT_PROCESS) {
+      this.buildTextProcessForm();
+    } else if (this.action.type === ActionType.HTTP_REQUEST) {
+      this.buildHttpRequestForm();
+    } else if (this.action.type === ActionType.USER_DIALOG) {
+      this.buildUserDialogForm();
+    } else if (this.action.type === ActionType.OPEN_URL) {
+      this.buildOpenUrlForm();
+    } else if (this.action.type === ActionType.NOTIFICATION) {
+      this.buildNotificationForm();
+    } else {
+      Text('暂不支持此动作类型的配置')
+        .fontSize(14)
+        .fontColor('#999999')
+        .textAlign(TextAlign.Center)
+        .padding(40);
     }
   }
 
@@ -718,7 +718,8 @@ export struct ActionConfigEditor {
           .fontSize(14)
           .onChange((value: string) => {
             if (!this.configData['headers']) {
-              this.configData['headers'] = {};
+              const emptyHeaders: Record<string, string> = {};
+              this.configData['headers'] = emptyHeaders;
             }
             (this.configData['headers'] as Record<string, string>)['Content-Type'] = value;
           })

@@ -53,6 +53,38 @@ HarmonyOSApp/
 
 ## ArkTS 语法要点
 
+**⚠️ 重要**：ArkTS 是 TypeScript 的严格子集，有许多语法限制。详见 `references/arkts-restrictions.md`
+
+### 关键语法限制（必读）
+
+ArkTS **不支持**以下常见 JavaScript/TypeScript 特性：
+
+1. **解构赋值** - `const { a, b } = obj` ❌
+2. **对象字面量无类型** - `const obj = {}` 必须声明类型 ❌
+3. **@Builder 中使用 switch** - 只能用 if-else ❌
+4. **build() 中声明变量** - 只能写 UI 组件 ❌
+5. **静态方法用 this** - 必须用类名 ❌
+6. **as const 断言** - 改用 enum 或联合类型 ❌
+
+```typescript
+// ❌ 错误示例
+const { isValid } = result;  // 不支持解构
+this.data = {};  // 对象字面量无类型
+const items = list.map(x => ({ id: x.id }));  // map 返回对象字面量
+
+// ✅ 正确写法
+const isValid = result.isValid;  // 直接访问
+const emptyData: Record<string, string> = {};  // 显式类型
+this.data = emptyData;
+const items: Item[] = [];  // forEach + 显式类型
+list.forEach(x => {
+  const item: Item = { id: x.id };
+  items.push(item);
+});
+```
+
+完整限制和解决方案请查看 **`references/arkts-restrictions.md`**
+
 ### 状态管理装饰器
 
 ```typescript
@@ -551,6 +583,7 @@ if (this.isShow) {
 
 详细文档请查看:
 
+- **`references/arkts-restrictions.md`** - ⚠️ ArkTS 语法限制和常见编译错误（必读）
 - `references/arkui-components.md` - ArkUI 组件完整清单和详细用法
 - `references/system-apis.md` - 系统 API 使用指南(媒体、设备、通知等)
 - `references/data-persistence.md` - 数据持久化方案(数据库、文件等)
@@ -565,8 +598,15 @@ if (this.isShow) {
 
 1. HarmonyOS Next 不支持 Android 应用,需使用 ArkTS 重新开发
 2. API 12+ 为当前主流版本(2025年)
-3. 组件必须使用 `@Component` 装饰器
-4. 入口页面使用 `@Entry` 装饰器
-5. 状态变量必须初始化
-6. UI 操作只能在主线程执行
-7. Navigation 路由方案是长期演进方向,优先使用
+3. **⚠️ ArkTS 语法严格限制**（详见 `references/arkts-restrictions.md`）：
+   - 不支持解构赋值 `const { a } = obj` ❌
+   - 对象字面量 `{}` 必须有显式类型声明 ❌
+   - @Builder 方法只能用 if-else，不能用 switch ❌
+   - build() 方法不能声明变量 ❌
+   - 静态方法调用用类名，不能用 this ❌
+4. 组件必须使用 `@Component` 装饰器
+5. 入口页面使用 `@Entry` 装饰器
+6. 状态变量必须初始化
+7. UI 操作只能在主线程执行
+8. Navigation 路由方案是长期演进方向,优先使用
+9. **遇到编译错误 10605038/10605074 等，请查阅 `references/arkts-restrictions.md`**

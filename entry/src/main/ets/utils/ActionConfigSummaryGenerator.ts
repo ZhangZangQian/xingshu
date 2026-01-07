@@ -52,7 +52,7 @@ export class ActionConfigSummaryGenerator {
    */
   private static generateClipboardReadSummary(config: any): string {
     if (config.saveToVariable) {
-      return `将剪贴板内容保存到变量`;
+      return `读取剪贴板 → {${config.saveToVariable}}`;
     }
     return '读取剪贴板';
   }

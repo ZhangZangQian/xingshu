@@ -1,6 +1,12 @@
 import { Macro, MacroInput, Trigger, Action, TriggerType, ActionType, TimeTriggerConfig, NetworkTriggerConfig, HttpHeaders } from '../models/Macro';
 import { Variable, VariableScope, VariableType } from '../models/Variable';
+import { ActionViewModel, ActionViewModelFactory } from '../models/ActionViewModel';
 import { DatabaseService } from '../services/DatabaseService';
+import { VariableFlowAnalyzer } from '../utils/VariableFlowAnalyzer';
+import { ActionConfigSummaryGenerator } from '../utils/ActionConfigSummaryGenerator';
+import { VariableNameRecommender } from '../utils/VariableNameRecommender';
+import { ActionConfigEditor } from '../components/ActionConfigEditor';
+import { VariableOption } from '../components/VariableSelector';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
 import router from '@ohos.router';
@@ -18,6 +24,8 @@ struct MacroEditor {
   @State isEditMode: boolean = false;
   @State triggers: Trigger[] = [];
   @State actions: Action[] = [];
+  @State actionViewModels: ActionViewModel[] = []; // 动作视图模型
+  @State highlightedVariable: string = ''; // 当前高亮的变量名
   @State variables: Variable[] = [];
   @State showVariableEditor: boolean = false;
   @State isVariableEditMode: boolean = false;
@@ -25,6 +33,15 @@ struct MacroEditor {
   @State varEditorName: string = '';
   @State varEditorType: VariableType = VariableType.STRING;
   @State varEditorValue: string = '';
+
+  // 动作配置编辑器状态
+  @State showActionConfigEditor: boolean = false;
+  @State editingAction: Action | null = null;
+  @State editingActionIndex: number = -1;
+  @State availableVariablesForEditor: VariableOption[] = [];
+
+  // 动作配置编辑器对话框控制器
+  private actionConfigDialogController: CustomDialogController | null = null;
 
   private macroId: number = 0;
   private databaseService: DatabaseService = DatabaseService.getInstance();
@@ -55,6 +72,9 @@ struct MacroEditor {
       this.triggers = await this.databaseService.getTriggersByMacroId(this.macroId);
       this.actions = await this.databaseService.getActionsByMacroId(this.macroId);
       this.variables = await this.databaseService.getVariablesByMacroId(this.macroId);
+
+      // 更新动作视图模型
+      this.updateActionViewModels();
 
     } catch (error) {
       Logger.error('MacroEditor', 'Failed to load macro', error as Error);
@@ -163,6 +183,350 @@ struct MacroEditor {
    */
   private handleCancel() {
     router.back();
+  }
+
+  /**
+   * 更新动作视图模型
+   * 分析变量流向并生成配置摘要
+   */
+  private updateActionViewModels() {
+    this.actionViewModels = this.actions.map((action, index) => {
+      // 获取之前已定义的变量
+      const definedVars = VariableFlowAnalyzer.getDefinedVariablesBeforeAction(
+        this.actions,
+        index,
+        this.variables
+      );
+
+      // 验证动作配置
+      const validationResult = VariableFlowAnalyzer.validateAction(
+        action,
+        index,
+        definedVars
+      );
+
+      // 提取输入/输出变量
+      const inputVars = ActionConfigSummaryGenerator.extractInputVariables(action);
+      const outputVar = ActionConfigSummaryGenerator.extractOutputVariable(action);
+
+      // 生成配置摘要
+      const summary = ActionConfigSummaryGenerator.generate(action);
+
+      return ActionViewModelFactory.create(
+        action,
+        inputVars,
+        outputVar,
+        summary,
+        validationResult.isValid,
+        validationResult.errors
+      );
+    });
+  }
+
+  /**
+   * 处理变量点击，切换高亮状态
+   */
+  private handleVariableClick(varName: string) {
+    if (this.highlightedVariable === varName) {
+      // 如果点击的是已高亮的变量，取消高亮
+      this.highlightedVariable = '';
+    } else {
+      // 否则高亮该变量
+      this.highlightedVariable = varName;
+    }
+  }
+
+  /**
+   * 准备可用变量列表
+   * @param actionIndex 当前编辑的动作索引
+   */
+  private prepareAvailableVariables(actionIndex: number) {
+    this.availableVariablesForEditor = [];
+
+    // 1. 添加系统变量
+    const systemVars: VariableOption[] = [
+      {
+        name: 'date',
+        displayName: '{date}',
+        type: 'system',
+        description: '当前日期 (YYYY-MM-DD)'
+      },
+      {
+        name: 'time',
+        displayName: '{time}',
+        type: 'system',
+        description: '当前时间 (HH:mm:ss)'
+      },
+      {
+        name: 'timestamp',
+        displayName: '{timestamp}',
+        type: 'system',
+        description: '当前时间戳'
+      },
+      {
+        name: 'clipboard',
+        displayName: '{clipboard}',
+        type: 'system',
+        description: '系统剪贴板内容'
+      },
+      {
+        name: 'network_type',
+        displayName: '{network_type}',
+        type: 'system',
+        description: '网络类型 (wifi/mobile)'
+      },
+      {
+        name: 'battery_level',
+        displayName: '{battery_level}',
+        type: 'system',
+        description: '电池电量百分比'
+      }
+    ];
+    this.availableVariablesForEditor.push(...systemVars);
+
+    // 2. 添加宏变量
+    this.variables.forEach(variable => {
+      this.availableVariablesForEditor.push({
+        name: variable.name,
+        displayName: `{${variable.name}}`,
+        type: 'macro',
+        description: `宏变量 (${this.getVariableTypeLabel(variable.type)})`
+      });
+    });
+
+    // 3. 添加之前动作输出的变量
+    for (let i = 0; i < actionIndex; i++) {
+      const outputVar = ActionConfigSummaryGenerator.extractOutputVariable(this.actions[i]);
+      if (outputVar) {
+        const summary = ActionConfigSummaryGenerator.generate(this.actions[i]);
+        this.availableVariablesForEditor.push({
+          name: outputVar,
+          displayName: `{${outputVar}}`,
+          type: 'runtime',
+          description: `来自动作 ${i + 1}: ${summary}`,
+          sourceActionIndex: i
+        });
+      }
+    }
+  }
+
+  /**
+   * 编辑动作
+   */
+  private handleEditAction(index: number) {
+    // 准备可用变量
+    this.prepareAvailableVariables(index);
+
+    // 设置编辑状态
+    this.editingActionIndex = index;
+
+    // 复制动作对象（避免直接修改原对象）
+    this.editingAction = JSON.parse(JSON.stringify(this.actions[index])) as Action;
+
+    // 创建并打开编辑器对话框
+    this.actionConfigDialogController = new CustomDialogController({
+      builder: ActionConfigEditor({
+        action: this.editingAction!,
+        isEditMode: true,
+        availableVariables: this.availableVariablesForEditor,
+        onSave: (updatedAction: Action) => {
+          this.handleActionConfigSave(updatedAction);
+        },
+        onCancel: () => {
+          this.handleActionConfigCancel();
+        }
+      }),
+      autoCancel: false,
+      customStyle: true
+    });
+
+    this.actionConfigDialogController.open();
+  }
+
+  /**
+   * 保存动作配置
+   */
+  private handleActionConfigSave(updatedAction: Action) {
+    Logger.info('MacroEditor', `Saving action config at index ${this.editingActionIndex}`);
+    Logger.info('MacroEditor', `Updated config: ${updatedAction.config}`);
+
+    if (this.editingActionIndex >= 0 && this.editingActionIndex < this.actions.length) {
+      // 确保保留正确的 orderIndex
+      updatedAction.orderIndex = this.editingActionIndex;
+
+      // 更新动作配置 - 使用数组替换触发响应式更新
+      const newActions = [...this.actions];
+      newActions[this.editingActionIndex] = updatedAction;
+      this.actions = newActions;
+
+      Logger.info('MacroEditor', `Actions array updated, length: ${this.actions.length}`);
+
+      // 更新视图模型
+      this.updateActionViewModels();
+
+      Logger.info('MacroEditor', `View models updated, length: ${this.actionViewModels.length}`);
+
+      promptAction.showToast({ message: '动作配置已更新' });
+    }
+
+    // 关闭编辑器
+    if (this.actionConfigDialogController) {
+      this.actionConfigDialogController.close();
+      this.actionConfigDialogController = null;
+    }
+
+    // 重置编辑状态
+    this.editingAction = null;
+    this.editingActionIndex = -1;
+  }
+
+  /**
+   * 取消编辑动作配置
+   */
+  private handleActionConfigCancel() {
+    // 关闭编辑器
+    if (this.actionConfigDialogController) {
+      this.actionConfigDialogController.close();
+      this.actionConfigDialogController = null;
+    }
+
+    // 重置编辑状态
+    this.editingAction = null;
+    this.editingActionIndex = -1;
+  }
+
+  /**
+   * 使用"快小红"流程模板
+   * 快速创建小红书内容采集到飞书的完整流程
+   */
+  private applyKuaiXiaoHongTemplate() {
+    promptAction.showDialog({
+      title: '使用快小红模板',
+      message: '将自动创建：\n1. 手动触发器\n2. 读取剪贴板\n3. 正则提取 URL\n4. 用户对话框（选择爆款标记）\n5. 用户对话框（选择分类标签）\n6. HTTP POST 请求\n7. 打开飞书表格\n\n是否继续？',
+      buttons: [
+        { text: '取消', color: '#000000' },
+        { text: '创建', color: '#007DFF' }
+      ]
+    }).then((result) => {
+      if (result.index === 1) {
+        this.createKuaiXiaoHongTemplate();
+      }
+    });
+  }
+
+  /**
+   * 创建快小红流程模板
+   */
+  private createKuaiXiaoHongTemplate() {
+    // 1. 添加手动触发器
+    const manualTrigger: Trigger = {
+      id: Date.now(),
+      macroId: this.macroId,
+      type: TriggerType.MANUAL,
+      config: JSON.stringify({ methods: ['button', 'shortcut'] }),
+      enabled: true
+    };
+    this.triggers.push(manualTrigger);
+
+    // 2. 读取剪贴板
+    const clipboardAction: Action = {
+      id: Date.now() + 1,
+      macroId: this.macroId,
+      type: ActionType.CLIPBOARD_READ,
+      config: JSON.stringify({
+        operation: 'read',
+        saveToVariable: 'clipboard_content'
+      }),
+      orderIndex: 0
+    };
+    this.actions.push(clipboardAction);
+
+    // 3. 正则提取 URL
+    const textProcessAction: Action = {
+      id: Date.now() + 2,
+      macroId: this.macroId,
+      type: ActionType.TEXT_PROCESS,
+      config: JSON.stringify({
+        operation: 'regex_extract',
+        input: '{clipboard_content}',
+        pattern: 'https?://[^\\s]+',
+        groupIndex: 0,
+        saveToVariable: 'extracted_url'
+      }),
+      orderIndex: 1
+    };
+    this.actions.push(textProcessAction);
+
+    // 4. 用户对话框 - 选择爆款标记
+    const qualityDialogAction: Action = {
+      id: Date.now() + 3,
+      macroId: this.macroId,
+      type: ActionType.USER_DIALOG,
+      config: JSON.stringify({
+        type: 'single_select',
+        title: '选择爆款标记',
+        message: '请选择内容的质量等级',
+        options: ['普通款', '潜力款', '大爆款'],
+        saveToVariable: 'quality'
+      }),
+      orderIndex: 2
+    };
+    this.actions.push(qualityDialogAction);
+
+    // 5. 用户对话框 - 选择分类标签
+    const labelDialogAction: Action = {
+      id: Date.now() + 4,
+      macroId: this.macroId,
+      type: ActionType.USER_DIALOG,
+      config: JSON.stringify({
+        type: 'multi_select',
+        title: '选择分类标签',
+        message: '请选择内容的分类标签（可多选）',
+        options: ['时尚美妆', '旅游出行', '美食探店', '数码科技', '家居生活', '运动健身'],
+        saveToVariable: 'labels'
+      }),
+      orderIndex: 3
+    };
+    this.actions.push(labelDialogAction);
+
+    // 6. HTTP POST 请求 - 调用 Coze API
+    const headers: HttpHeaders = { 'Content-Type': 'application/json' };
+    const httpAction: Action = {
+      id: Date.now() + 5,
+      macroId: this.macroId,
+      type: ActionType.HTTP_REQUEST,
+      config: JSON.stringify({
+        method: 'POST',
+        url: 'https://api.coze.cn/v1/workflow/run',
+        headers: headers,
+        body: '{"workflow_id":"7550495126771449906","parameters":{"url":"{extracted_url}","quality":"{quality}","label":"{labels}"}}',
+        timeout: 30000,
+        saveResponseTo: 'api_response'
+      }),
+      orderIndex: 4
+    };
+    this.actions.push(httpAction);
+
+    // 7. 打开飞书多维表格
+    const openUrlAction: Action = {
+      id: Date.now() + 6,
+      macroId: this.macroId,
+      type: ActionType.OPEN_URL,
+      config: JSON.stringify({
+        url: 'https://example.feishu.cn/base/xxx',
+        openWith: 'browser'
+      }),
+      orderIndex: 5
+    };
+    this.actions.push(openUrlAction);
+
+    // 更新视图模型
+    this.updateActionViewModels();
+
+    promptAction.showToast({
+      message: '快小红流程模板已创建！包含 1 个触发器和 6 个动作',
+      duration: 3000
+    });
   }
 
   /**
@@ -364,6 +728,7 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
+    this.updateActionViewModels(); // 更新视图模型
     promptAction.showToast({ message: '发送通知动作已添加' });
   }
 
@@ -371,24 +736,49 @@ struct MacroEditor {
    * 添加读取剪贴板动作
    */
   private addClipboardReadAction() {
+    // 获取已存在的变量名
+    const existingVars = VariableNameRecommender.extractExistingVariableNames(
+      this.actions,
+      this.variables
+    );
+
+    // 推荐变量名
+    const recommendedName = VariableNameRecommender.recommendOutputVariableName(
+      ActionType.CLIPBOARD_READ,
+      existingVars
+    );
+
     const action: Action = {
       id: Date.now(),
       macroId: this.macroId,
       type: ActionType.CLIPBOARD_READ,
       config: JSON.stringify({
         operation: 'read',
-        saveToVariable: 'clipboard_content'
+        saveToVariable: recommendedName
       }),
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    promptAction.showToast({ message: '读取剪贴板动作已添加' });
+    this.updateActionViewModels(); // 更新视图模型
+    promptAction.showToast({ message: `读取剪贴板动作已添加，保存到变量 ${recommendedName}` });
   }
 
   /**
    * 添加 HTTP 请求动作
    */
   private addHttpRequestAction() {
+    // 获取已存在的变量名
+    const existingVars = VariableNameRecommender.extractExistingVariableNames(
+      this.actions,
+      this.variables
+    );
+
+    // 推荐变量名
+    const recommendedName = VariableNameRecommender.recommendOutputVariableName(
+      ActionType.HTTP_REQUEST,
+      existingVars
+    );
+
     const headers: HttpHeaders = { 'Content-Type': 'application/json' };
     const action: Action = {
       id: Date.now(),
@@ -400,12 +790,13 @@ struct MacroEditor {
         headers: headers,
         body: '{}',
         timeout: 30000,
-        saveResponseTo: 'api_response'
+        saveResponseTo: recommendedName
       }),
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    promptAction.showToast({ message: 'HTTP 请求动作已添加' });
+    this.updateActionViewModels(); // 更新视图模型
+    promptAction.showToast({ message: `HTTP 请求动作已添加，保存到变量 ${recommendedName}` });
   }
 
   /**
@@ -423,6 +814,7 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
+    this.updateActionViewModels(); // 更新视图模型
     promptAction.showToast({ message: '打开 URL 动作已添加' });
   }
 
@@ -430,6 +822,24 @@ struct MacroEditor {
    * 添加文本处理动作
    */
   private addTextProcessAction() {
+    // 获取已存在的变量名
+    const existingVars = VariableNameRecommender.extractExistingVariableNames(
+      this.actions,
+      this.variables
+    );
+
+    // 获取前一个动作类型（用于上下文推荐）
+    const previousActionType = this.actions.length > 0 ?
+      this.actions[this.actions.length - 1].type : undefined;
+
+    // 推荐变量名（上下文感知）
+    const recommendedName = VariableNameRecommender.recommendContextualVariableName(
+      ActionType.TEXT_PROCESS,
+      'regex_extract',
+      previousActionType,
+      existingVars
+    );
+
     const action: Action = {
       id: Date.now(),
       macroId: this.macroId,
@@ -439,23 +849,52 @@ struct MacroEditor {
         input: '{clipboard_content}',
         pattern: 'https?://[^\\s]+',
         groupIndex: 0,
-        saveToVariable: 'extracted_url'
+        saveToVariable: recommendedName
       }),
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    promptAction.showToast({ message: '文本处理动作已添加' });
+    this.updateActionViewModels(); // 更新视图模型
+    promptAction.showToast({ message: `文本处理动作已添加，保存到变量 ${recommendedName}` });
   }
 
   /**
    * 删除动作
    */
   private deleteAction(index: number) {
-    this.actions.splice(index, 1);
-    // 重新调整 orderIndex
-    this.actions.forEach((action, idx) => {
-      action.orderIndex = idx;
-    });
+    // 检查是否会影响其他动作
+    const affectedIndices = VariableFlowAnalyzer.getAffectedActionsByDeletion(
+      this.actions,
+      index
+    );
+
+    if (affectedIndices.length > 0) {
+      const affectedActions = affectedIndices.map(i => `动作 ${i + 1}`).join('、');
+      promptAction.showDialog({
+        title: '警告',
+        message: `删除此动作会影响 ${affectedActions}，是否继续？`,
+        buttons: [
+          { text: '取消', color: '#000000' },
+          { text: '删除', color: '#ff4d4f' }
+        ]
+      }).then((result) => {
+        if (result.index === 1) {
+          this.actions.splice(index, 1);
+          // 重新调整 orderIndex
+          this.actions.forEach((action, idx) => {
+            action.orderIndex = idx;
+          });
+          this.updateActionViewModels(); // 更新视图模型
+        }
+      });
+    } else {
+      this.actions.splice(index, 1);
+      // 重新调整 orderIndex
+      this.actions.forEach((action, idx) => {
+        action.orderIndex = idx;
+      });
+      this.updateActionViewModels(); // 更新视图模型
+    }
   }
 
   /**
@@ -470,6 +909,7 @@ struct MacroEditor {
       this.actions.forEach((action, idx) => {
         action.orderIndex = idx;
       });
+      this.updateActionViewModels(); // 更新视图模型
     }
   }
 
@@ -485,6 +925,7 @@ struct MacroEditor {
       this.actions.forEach((action, idx) => {
         action.orderIndex = idx;
       });
+      this.updateActionViewModels(); // 更新视图模型
     }
   }
 
@@ -753,6 +1194,58 @@ struct MacroEditor {
           .borderRadius(8)
           .alignItems(HorizontalAlign.Start)
 
+          // 模板区域
+          Column({ space: 12 }) {
+            Text('快速开始')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+
+            Text('使用预设模板快速创建宏')
+              .fontSize(12)
+              .fontColor('#999999')
+
+            // 快小红模板按钮
+            Row({ space: 12 }) {
+              Column({ space: 8 }) {
+                Row({ space: 8 }) {
+                  Text('📱')
+                    .fontSize(24)
+
+                  Column({ space: 4 }) {
+                    Text('快小红流程')
+                      .fontSize(16)
+                      .fontWeight(FontWeight.Bold)
+
+                    Text('小红书内容采集到飞书')
+                      .fontSize(12)
+                      .fontColor('#666666')
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .flexGrow(1)
+                }
+
+                Text('包含：读取剪贴板 → URL提取 → 用户选择 → API调用 → 打开飞书')
+                  .fontSize(11)
+                  .fontColor('#999999')
+                  .maxLines(2)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              .flexGrow(1)
+              .padding(12)
+              .backgroundColor('#f0f9ff')
+              .borderRadius(8)
+              .border({ width: 1, color: '#91d5ff' })
+              .onClick(() => {
+                this.applyKuaiXiaoHongTemplate();
+              })
+            }
+            .width('100%')
+          }
+          .padding(16)
+          .backgroundColor('#ffffff')
+          .borderRadius(8)
+          .alignItems(HorizontalAlign.Start)
+
           // 触发器区域
           Column({ space: 12 }) {
             Row() {
@@ -838,7 +1331,7 @@ struct MacroEditor {
             .width('100%')
 
             // 动作列表
-            if (this.actions.length === 0) {
+            if (this.actionViewModels.length === 0) {
               Text('暂无动作')
                 .fontSize(14)
                 .fontColor('#999999')
@@ -846,62 +1339,238 @@ struct MacroEditor {
                 .textAlign(TextAlign.Center)
                 .padding(20)
             } else {
-              Column({ space: 8 }) {
-                ForEach(this.actions, (action: Action, index: number) => {
-                  Row({ space: 12 }) {
-                    Text(`${index + 1}`)
-                      .fontSize(16)
-                      .fontWeight(FontWeight.Bold)
-                      .width(24)
+              Column({ space: 12 }) {
+                ForEach(this.actionViewModels, (viewModel: ActionViewModel, index: number) => {
+                  Column({ space: 8 }) {
+                    // 动作卡片
+                    Column({ space: 12 }) {
+                      // 标题行
+                      Row({ space: 12 }) {
+                        // 序号和动作类型
+                        Row({ space: 8 }) {
+                          // 序号圆圈
+                          Text(`${index + 1}`)
+                            .fontSize(14)
+                            .fontWeight(FontWeight.Bold)
+                            .fontColor('#ffffff')
+                            .width(28)
+                            .height(28)
+                            .textAlign(TextAlign.Center)
+                            .borderRadius(14)
+                            .backgroundColor(viewModel.isValid ? '#007DFF' : '#ff4d4f')
 
-                    Column({ space: 4 }) {
-                      Text(this.getActionDescription(action))
-                        .fontSize(16)
-                        .fontWeight(FontWeight.Medium)
+                          Column({ space: 4 }) {
+                            Text(this.getActionDescription(viewModel))
+                              .fontSize(16)
+                              .fontWeight(FontWeight.Bold)
 
-                      Text(action.type)
-                        .fontSize(12)
-                        .fontColor('#666666')
+                            if (viewModel.configSummary) {
+                              Text(viewModel.configSummary)
+                                .fontSize(12)
+                                .fontColor('#666666')
+                                .maxLines(2)
+                                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                            }
+                          }
+                          .alignItems(HorizontalAlign.Start)
+                          .flexGrow(1)
+                        }
+                        .flexGrow(1)
+
+                        // 编辑按钮
+                        Button('编辑')
+                          .fontSize(12)
+                          .height(28)
+                          .padding({ left: 12, right: 12 })
+                          .backgroundColor('#e6f7ff')
+                          .fontColor('#1890ff')
+                          .onClick(() => {
+                            this.handleEditAction(index);
+                          })
+                      }
+                      .width('100%')
+
+                      // 输入变量标签
+                      if (viewModel.inputVariables.length > 0) {
+                        Row({ space: 8 }) {
+                          Text('使用变量:')
+                            .fontSize(12)
+                            .fontColor('#999999')
+
+                          Flex({ wrap: FlexWrap.Wrap }) {
+                            ForEach(viewModel.inputVariables, (varName: string) => {
+                              Text(`{${varName}}`)
+                                .fontSize(11)
+                                .fontColor(this.highlightedVariable === varName ? '#ffffff' : '#52c41a')
+                                .backgroundColor(this.highlightedVariable === varName ? '#52c41a' : '#f6ffed')
+                                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                                .borderRadius(4)
+                                .margin({ right: 4, bottom: 4 })
+                                .border({
+                                  width: this.highlightedVariable === varName ? 2 : 1,
+                                  color: this.highlightedVariable === varName ? '#52c41a' : '#b7eb8f'
+                                })
+                                .onClick(() => {
+                                  this.handleVariableClick(varName);
+                                })
+                            })
+                          }
+                        }
+                        .width('100%')
+                      }
+
+                      // 输出变量标签
+                      if (viewModel.outputVariable) {
+                        Row({ space: 8 }) {
+                          Text('输出 →')
+                            .fontSize(12)
+                            .fontColor('#999999')
+
+                          Text(`[${viewModel.outputVariable}]`)
+                            .fontSize(11)
+                            .fontColor(this.highlightedVariable === viewModel.outputVariable ? '#ffffff' : '#1890ff')
+                            .fontWeight(FontWeight.Bold)
+                            .backgroundColor(this.highlightedVariable === viewModel.outputVariable ? '#1890ff' : '#e6f7ff')
+                            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                            .borderRadius(4)
+                            .border({
+                              width: this.highlightedVariable === viewModel.outputVariable ? 2 : 1,
+                              color: this.highlightedVariable === viewModel.outputVariable ? '#1890ff' : '#91d5ff'
+                            })
+                            .onClick(() => {
+                              this.handleVariableClick(viewModel.outputVariable!);
+                            })
+                        }
+                        .width('100%')
+                      }
+
+                      // 验证错误提示
+                      if (!viewModel.isValid && viewModel.validationErrors.length > 0) {
+                        Column({ space: 4 }) {
+                          ForEach(viewModel.validationErrors, (error: string) => {
+                            Row({ space: 6 }) {
+                              Text('⚠️')
+                                .fontSize(12)
+
+                              Text(error)
+                                .fontSize(12)
+                                .fontColor('#ff4d4f')
+                                .flexGrow(1)
+                            }
+                          })
+                        }
+                        .width('100%')
+                        .padding(8)
+                        .backgroundColor('#fff1f0')
+                        .borderRadius(4)
+                        .border({ width: 1, color: '#ffa39e' })
+                      }
+
+                      // 操作按钮行
+                      Row({ space: 8 }) {
+                        // 排序按钮
+                        Row({ space: 4 }) {
+                          Button('↑')
+                            .fontSize(14)
+                            .height(28)
+                            .width(36)
+                            .padding(0)
+                            .backgroundColor(index > 0 ? '#f0f0f0' : '#e0e0e0')
+                            .fontColor(index > 0 ? '#333333' : '#999999')
+                            .enabled(index > 0)
+                            .onClick(() => {
+                              this.moveActionUp(index);
+                            })
+
+                          Button('↓')
+                            .fontSize(14)
+                            .height(28)
+                            .width(36)
+                            .padding(0)
+                            .backgroundColor(index < this.actionViewModels.length - 1 ? '#f0f0f0' : '#e0e0e0')
+                            .fontColor(index < this.actionViewModels.length - 1 ? '#333333' : '#999999')
+                            .enabled(index < this.actionViewModels.length - 1)
+                            .onClick(() => {
+                              this.moveActionDown(index);
+                            })
+                        }
+
+                        Blank()
+
+                        Button('删除')
+                          .fontSize(12)
+                          .height(28)
+                          .padding({ left: 12, right: 12 })
+                          .backgroundColor('#fff1f0')
+                          .fontColor('#ff4d4f')
+                          .onClick(() => {
+                            this.deleteAction(index);
+                          })
+                      }
+                      .width('100%')
                     }
-                    .flexGrow(1)
-                    .alignItems(HorizontalAlign.Start)
+                    .width('100%')
+                    .padding(16)
+                    .backgroundColor('#ffffff')
+                    .borderRadius(8)
+                    .border({
+                      width: viewModel.isValid ? 1 : 2,
+                      color: viewModel.isValid ? '#e8e8e8' : '#ff4d4f'
+                    })
 
-                    // 排序按钮
-                    Column({ space: 4 }) {
-                      Button('↑')
-                        .fontSize(14)
-                        .height(28)
-                        .width(40)
-                        .backgroundColor(index > 0 ? '#007DFF' : '#cccccc')
-                        .enabled(index > 0)
-                        .onClick(() => {
-                          this.moveActionUp(index);
-                        })
+                    // 变量流向连线（使用 Unicode 箭头）
+                    if (index < this.actionViewModels.length - 1) {
+                      // 检查当前动作是否有输出变量，且下一个动作使用了该变量
+                      if (viewModel.outputVariable &&
+                        this.actionViewModels[index + 1].inputVariables.includes(viewModel.outputVariable)) {
+                        // 有变量传递，显示变量标签
+                        Row() {
+                          Text('↓')
+                            .fontSize(20)
+                            .fontColor(this.highlightedVariable === viewModel.outputVariable ? '#52c41a' : '#1890ff')
+                            .width('100%')
+                            .textAlign(TextAlign.Center)
 
-                      Button('↓')
-                        .fontSize(14)
-                        .height(28)
-                        .width(40)
-                        .backgroundColor(index < this.actions.length - 1 ? '#007DFF' : '#cccccc')
-                        .enabled(index < this.actions.length - 1)
-                        .onClick(() => {
-                          this.moveActionDown(index);
-                        })
+                          Text(`{${viewModel.outputVariable}}`)
+                            .fontSize(11)
+                            .fontColor(this.highlightedVariable === viewModel.outputVariable ? '#ffffff' : '#1890ff')
+                            .backgroundColor(this.highlightedVariable === viewModel.outputVariable ? '#52c41a' : '#e6f7ff')
+                            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                            .borderRadius(4)
+                            .border({
+                              width: this.highlightedVariable === viewModel.outputVariable ? 2 : 1,
+                              color: this.highlightedVariable === viewModel.outputVariable ? '#52c41a' : '#91d5ff'
+                            })
+                            .position({ x: '50%', y: 10 })
+                            .translate({ x: '-50%', y: 0 })
+                            .onClick(() => {
+                              this.handleVariableClick(viewModel.outputVariable!);
+                            })
+                        }
+                        .width('100%')
+                        .height(32)
+                        .justifyContent(FlexAlign.Center)
+                      } else if (viewModel.outputVariable) {
+                        // 有输出但未被使用，显示普通连线
+                        Text('↓')
+                          .fontSize(16)
+                          .fontColor('#d9d9d9')
+                          .width('100%')
+                          .textAlign(TextAlign.Center)
+                          .height(24)
+                      } else {
+                        // 没有输出变量，显示普通连线
+                        Text('↓')
+                          .fontSize(16)
+                          .fontColor('#d9d9d9')
+                          .width('100%')
+                          .textAlign(TextAlign.Center)
+                          .height(24)
+                      }
                     }
-
-                    Button('删除')
-                      .fontSize(14)
-                      .height(32)
-                      .backgroundColor('#ff4444')
-                      .onClick(() => {
-                        this.deleteAction(index);
-                      })
                   }
                   .width('100%')
-                  .padding(12)
-                  .backgroundColor('#f5f5f5')
-                  .borderRadius(8)
-                }, (action: Action, index: number) => index.toString())
+                }, (viewModel: ActionViewModel) => viewModel.id?.toString() || '')
               }
               .width('100%')
             }

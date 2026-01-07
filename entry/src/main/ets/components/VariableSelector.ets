@@ -258,28 +258,38 @@ export class VariableSelectorHelper {
    * 从宏变量生成选项
    */
   static fromMacroVariables(variables: Variable[]): VariableOption[] {
-    return variables
+    const result: VariableOption[] = [];
+    variables
       .filter(v => v.scope === 'macro')
-      .map(v => ({
-        name: v.name,
-        displayName: `{${v.name}}`,
-        type: 'macro' as const,
-        description: `类型: ${this.getTypeLabel(v.type)}, 值: ${v.value}`
-      }));
+      .forEach(v => {
+        const option: VariableOption = {
+          name: v.name,
+          displayName: `{${v.name}}`,
+          type: 'macro',
+          description: `类型: ${VariableSelectorHelper.getTypeLabel(v.type)}, 值: ${v.value}`
+        };
+        result.push(option);
+      });
+    return result;
   }
 
   /**
    * 从全局变量生成选项
    */
   static fromGlobalVariables(variables: Variable[]): VariableOption[] {
-    return variables
+    const result: VariableOption[] = [];
+    variables
       .filter(v => v.scope === 'global')
-      .map(v => ({
-        name: v.name,
-        displayName: `{${v.name}}`,
-        type: 'global' as const,
-        description: `类型: ${this.getTypeLabel(v.type)}, 值: ${v.value}`
-      }));
+      .forEach(v => {
+        const option: VariableOption = {
+          name: v.name,
+          displayName: `{${v.name}}`,
+          type: 'global',
+          description: `类型: ${VariableSelectorHelper.getTypeLabel(v.type)}, 值: ${v.value}`
+        };
+        result.push(option);
+      });
+    return result;
   }
 
   /**
