@@ -22,10 +22,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # 运行应用（Debug 模式）
 # 在 DevEco Studio 中点击 Run 按钮，或使用命令行：
-hvigor assembleHap --mode module -p module=entry@default -p product=default
+"D:\Program Files\Huawei\DevEco Studio\tools\node\node.exe" "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default -p requiredDeviceType=phone assembleHap --analyze=normal --parallel --incremental --daemon
 
 # 构建 Release 版本
-hvigor assembleHap --mode module -p module=entry@default -p product=default --release
+"D:\Program Files\Huawei\DevEco Studio\tools\node\node.exe" "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default -p requiredDeviceType=phone assembleHap --analyze=normal --parallel --incremental --daemon --release
 
 # 运行测试（单元测试）
 # 在 entry/src/test/ 或 entry/src/ohosTest/ 目录下的测试文件

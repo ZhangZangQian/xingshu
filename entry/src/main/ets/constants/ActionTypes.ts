@@ -10,6 +10,8 @@ export class ActionTypes {
   static readonly OPEN_URL = 'open_url';
   static readonly TEXT_PROCESS = 'text_process';
   static readonly USER_DIALOG = 'user_dialog';
+  static readonly SET_VARIABLE = 'set_variable';
+  static readonly IF_ELSE = 'if_else';
 
   /**
    * 获取所有动作类型
@@ -23,7 +25,9 @@ export class ActionTypes {
       ActionTypes.CLIPBOARD_WRITE,
       ActionTypes.OPEN_URL,
       ActionTypes.TEXT_PROCESS,
-      ActionTypes.USER_DIALOG
+      ActionTypes.USER_DIALOG,
+      ActionTypes.SET_VARIABLE,
+      ActionTypes.IF_ELSE
     ];
   }
 
@@ -48,6 +52,10 @@ export class ActionTypes {
         return '文本处理';
       case ActionTypes.USER_DIALOG:
         return '用户交互对话框';
+      case ActionTypes.SET_VARIABLE:
+        return '设置变量';
+      case ActionTypes.IF_ELSE:
+        return '条件分支';
       default:
         return '未知类型';
     }

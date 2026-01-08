@@ -387,6 +387,24 @@ export class DatabaseService {
     }
   }
 
+  /**
+   * 删除宏的所有触发器
+   */
+  async deleteTriggersByMacroId(macroId: number): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('trigger');
+    predicates.equalTo('macro_id', macroId);
+
+    try {
+      const rowsAffected = await this.store.delete(predicates);
+      Logger.info('DatabaseService', `Deleted ${rowsAffected} triggers for macro ${macroId}`);
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to delete triggers', error as Error);
+      throw new Error(`删除触发器失败: ${error.message}`);
+    }
+  }
+
   // ==================== 动作 CRUD ====================
 
   /**
@@ -408,6 +426,36 @@ export class DatabaseService {
     } catch (error) {
       Logger.error('DatabaseService', 'Failed to insert action', error as Error);
       throw new Error(`创建动作失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 更新动作
+   */
+  async updateAction(actionId: number, action: Partial<Action>): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const valueBucket: relationalStore.ValuesBucket = {};
+
+    if (action.type !== undefined) {
+      valueBucket.type = action.type;
+    }
+    if (action.config !== undefined) {
+      valueBucket.config = action.config;
+    }
+    if (action.orderIndex !== undefined) {
+      valueBucket.order_index = action.orderIndex;
+    }
+
+    const predicates = new relationalStore.RdbPredicates('action');
+    predicates.equalTo('id', actionId);
+
+    try {
+      const rowsAffected = await this.store.update(valueBucket, predicates);
+      Logger.info('DatabaseService', `Updated action ${actionId}, rows affected: ${rowsAffected}`);
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to update action', error as Error);
+      throw new Error(`更新动作失败: ${error.message}`);
     }
   }
 
@@ -434,6 +482,24 @@ export class DatabaseService {
     } catch (error) {
       Logger.error('DatabaseService', `Failed to get actions for macro ${macroId}`, error as Error);
       throw new Error(`查询动作失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 删除宏的所有动作
+   */
+  async deleteActionsByMacroId(macroId: number): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('action');
+    predicates.equalTo('macro_id', macroId);
+
+    try {
+      const rowsAffected = await this.store.delete(predicates);
+      Logger.info('DatabaseService', `Deleted ${rowsAffected} actions for macro ${macroId}`);
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to delete actions', error as Error);
+      throw new Error(`删除动作失败: ${error.message}`);
     }
   }
 
@@ -747,6 +813,25 @@ export class DatabaseService {
     } catch (error) {
       Logger.error('DatabaseService', `Failed to get variables for macro ${macroId}`, error as Error);
       throw new Error(`查询宏变量失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * 删除宏的所有变量
+   */
+  async deleteVariablesByMacroId(macroId: number): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('variable');
+    predicates.equalTo('scope', VariableScope.MACRO);
+    predicates.equalTo('macro_id', macroId);
+
+    try {
+      const rowsAffected = await this.store.delete(predicates);
+      Logger.info('DatabaseService', `Deleted ${rowsAffected} variables for macro ${macroId}`);
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to delete variables', error as Error);
+      throw new Error(`删除变量失败: ${error.message}`);
     }
   }
 

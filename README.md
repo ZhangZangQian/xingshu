@@ -133,10 +133,10 @@ cd HarmonyMacro
 
 ```bash
 # Debug 版本
-hvigor assembleHap --mode module -p module=entry@default -p product=default
+"D:\Program Files\Huawei\DevEco Studio\tools\node\node.exe" "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default -p requiredDeviceType=phone assembleHap --analyze=normal --parallel --incremental --daemon
 
 # Release 版本
-hvigor assembleHap --mode module -p module=entry@default -p product=default --release
+"D:\Program Files\Huawei\DevEco Studio\tools\node\node.exe" "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default -p requiredDeviceType=phone assembleHap --analyze=normal --parallel --incremental --daemon --release
 ```
 
 ### 上架华为应用市场

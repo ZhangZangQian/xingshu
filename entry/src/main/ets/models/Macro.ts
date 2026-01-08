@@ -107,7 +107,9 @@ export enum ActionType {
   CLIPBOARD_WRITE = 'clipboard_write',     // 写入剪贴板
   OPEN_URL = 'open_url',                   // 打开 URL
   TEXT_PROCESS = 'text_process',           // 文本处理
-  USER_DIALOG = 'user_dialog'              // 用户交互对话框
+  USER_DIALOG = 'user_dialog',             // 用户交互对话框
+  SET_VARIABLE = 'set_variable',           // 设置变量
+  IF_ELSE = 'if_else'
 }
 
 /**
@@ -122,7 +124,8 @@ export interface Action {
 
   // 运行时解析的配置对象
   parsedConfig?: LaunchAppConfig | NotificationConfig | HttpRequestConfig |
-                 ClipboardConfig | OpenUrlConfig | TextProcessConfig | UserDialogConfig;
+                 ClipboardConfig | OpenUrlConfig | TextProcessConfig | UserDialogConfig |
+                 SetVariableConfig | IfElseConfig;
 }
 
 /**
@@ -227,6 +230,15 @@ export interface UserDialogConfig {
 }
 
 /**
+ * 设置变量动作配置
+ */
+export interface SetVariableConfig {
+  variableName: string;            // 变量名
+  value: string;                   // 变量值（支持变量引用，如 {clipboard}）
+  scope: 'runtime' | 'global' | 'macro';  // 变量作用域
+}
+
+/**
  * 条件数据模型
  */
 export interface Condition {
@@ -289,4 +301,40 @@ export interface SystemVariables {
   clipboard: string;               // 剪贴板内容
   network_type: string;            // 当前网络类型
   battery_level: number;           // 当前电量百分比
+}
+
+/**
+ * IF_ELSE 分支动作配置
+ */
+export interface IfElseConfig {
+  branches: Branch[];  // 分支列表（顺序执行，第一个匹配的分支会被执行）
+}
+
+/**
+ * 分支定义
+ */
+export interface Branch {
+  name?: string;                   // 分支名称（可选，用于调试和UI显示）
+  conditions?: BranchCondition[];  // 分支条件（为空表示 else 分支）
+  actions: ActionConfig[];         // 分支内的动作列表
+}
+
+/**
+ * 分支条件（简化版）
+ */
+export interface BranchCondition {
+  field: string;                   // 比较字段（变量名）
+  operator: ConditionOperator;     // 运算符
+  value: string;                   // 比较值
+  logicOperator?: 'AND' | 'OR';    // 与下一个条件的逻辑关系（默认 AND）
+}
+
+/**
+ * 动作配置（用于嵌套在分支中）
+ */
+export interface ActionConfig {
+  type: ActionType;
+  config: LaunchAppConfig | NotificationConfig | HttpRequestConfig |
+  ClipboardConfig | OpenUrlConfig | TextProcessConfig | UserDialogConfig |
+  SetVariableConfig | IfElseConfig;  // 支持嵌套
 }

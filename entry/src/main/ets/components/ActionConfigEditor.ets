@@ -1,5 +1,44 @@
 import { Action, ActionType } from '../models/Macro';
 import { VariableOption } from './VariableSelector';
+import { CommonTopBar, TopBarConfig } from './CommonTopBar';
+
+// 条件分支配置类型
+interface BranchCondition {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+interface NotificationActionConfig {
+  title: string;
+  content: string;
+  enableSound: boolean;
+  enableVibration: boolean;
+}
+
+interface HttpRequestActionConfig {
+  url: string;
+  method: string;
+  body: string;
+  headers: Record<string, string>;
+  timeout: number;
+}
+
+interface OpenUrlActionConfig {
+  url: string;
+  openWith: string;
+}
+
+interface BaseBranchActionConfig {
+  type: string;
+  config: NotificationActionConfig | HttpRequestActionConfig | OpenUrlActionConfig;
+}
+
+export interface BranchConfig {
+  name: string;
+  conditions: BranchCondition[];
+  actions: BaseBranchActionConfig[];
+}
 
 /**
  * 动作配置编辑器
@@ -10,8 +49,8 @@ export struct ActionConfigEditor {
   // 对话框控制器
   controller: CustomDialogController;
 
-  // 要编辑的动作
-  @Prop action: Action;
+  // 要编辑的动作（使用 @Watch 监听变化）
+  @Prop @Watch('onActionChanged') action: Action;
 
   // 是否是编辑模式（false 表示新建）
   isEditMode: boolean = false;
@@ -26,14 +65,69 @@ export struct ActionConfigEditor {
   // 内部状态 - 配置数据
   @State configData: Record<string, Object> = {};
 
+  // 条件分支编辑器状态
+  @State branches: BranchConfig[] = [];
+  @State editingBranchIndex: number = -1;
+  @State editingConditionIndex: number = -1;
+  @State editingActionIndex: number = -1;
+  @State showBranchEditor: boolean = false;
+  @State conditionField: string = '';
+  @State conditionOperator: string = '==';
+  @State conditionValue: string = '';
+
   aboutToAppear() {
     // 初始化配置数据
+    this.initializeConfigData();
+  }
+
+  /**
+   * 当 action 属性变化时调用（@Watch 回调）
+   */
+  onActionChanged() {
+    console.info('[ActionConfigEditor] Action changed, reinitializing config');
+    this.initializeConfigData();
+  }
+
+  /**
+   * 初始化配置数据
+   */
+  private initializeConfigData() {
     try {
       this.configData = JSON.parse(this.action.config);
+      console.info('[ActionConfigEditor] Config data initialized:', JSON.stringify(this.configData));
+
+      // 初始化条件分支数据
+      if (this.action.type === ActionType.IF_ELSE) {
+        const branchesData = this.configData['branches'] as BranchConfig[];
+        this.branches = branchesData || [];
+      }
     } catch (error) {
       console.error('[ActionConfigEditor] Failed to parse config:', error);
       this.configData = {};
+
+      // 如果是条件分支，初始化默认数据
+      if (this.action.type === ActionType.IF_ELSE) {
+        this.branches = [];
+      }
     }
+  }
+
+  /**
+   * 更新配置数据（触发响应式更新）
+   * ArkTS 不支持对象展开运算符，需要手动复制
+   */
+  private updateConfigData(key: string, value: Object) {
+    console.info(`[ActionConfigEditor] Updating config: ${key} = ${JSON.stringify(value)}`);
+    // 创建新对象并手动复制所有属性
+    const newConfig: Record<string, Object> = {};
+    const keys = Object.keys(this.configData);
+    for (let i = 0; i < keys.length; i++) {
+      newConfig[keys[i]] = this.configData[keys[i]];
+    }
+    // 更新指定的键值
+    newConfig[key] = value;
+    // 触发响应式更新
+    this.configData = newConfig;
   }
 
   /**
@@ -42,6 +136,13 @@ export struct ActionConfigEditor {
   private handleSave() {
     try {
       console.info('[ActionConfigEditor] Starting save process');
+      console.info('[ActionConfigEditor] Current configData:', JSON.stringify(this.configData));
+
+      // 如果正在编辑分支，先返回分支列表
+      if (this.showBranchEditor) {
+        this.showBranchEditor = false;
+        return;
+      }
 
       // 验证配置
       const errors = this.validateConfig();
@@ -57,6 +158,8 @@ export struct ActionConfigEditor {
         });
         return;
       }
+
+      console.info('[ActionConfigEditor] Validation passed');
 
       // 创建新的 action 对象（不能直接修改 @Prop 变量）
       const updatedAction: Action = {
@@ -77,10 +180,19 @@ export struct ActionConfigEditor {
         console.warn('[ActionConfigEditor] onSave callback is not defined!');
       }
 
+      console.info('[ActionConfigEditor] Closing dialog');
       // 关闭对话框
       this.controller.close();
     } catch (error) {
       console.error('[ActionConfigEditor] Failed to save config:', error);
+      AlertDialog.show({
+        title: '保存失败',
+        message: `错误：${error}`,
+        confirm: {
+          value: '确定',
+          action: () => {}
+        }
+      });
     }
   }
 
@@ -151,6 +263,24 @@ export struct ActionConfigEditor {
           errors.push('通知内容不能为空');
         }
         break;
+
+      case ActionType.SET_VARIABLE:
+        if (!this.configData['variableName']) {
+          errors.push('变量名不能为空');
+        }
+        if (!this.configData['value']) {
+          errors.push('变量值不能为空');
+        }
+        if (!this.configData['scope']) {
+          errors.push('变量作用域不能为空');
+        }
+        break;
+
+      case ActionType.IF_ELSE:
+        if (!this.configData['branches'] || !(this.configData['branches'] as Object[]).length) {
+          errors.push('至少需要一个分支');
+        }
+        break;
     }
 
     return errors;
@@ -168,40 +298,22 @@ export struct ActionConfigEditor {
       'user_dialog': '用户对话框',
       'open_url': '打开 URL',
       'notification': '发送通知',
-      'launch_app': '启动应用'
+      'launch_app': '启动应用',
+      'set_variable': '设置变量',
+      'if_else': '条件分支'
     };
     return names[this.action.type] || this.action.type;
   }
 
   build() {
     Column() {
-      // 顶部标题栏
-      Row() {
-        Button('取消')
-          .fontSize(16)
-          .backgroundColor(Color.Transparent)
-          .fontColor('#007DFF')
-          .onClick(() => {
-            this.handleCancel();
-          })
-
-        Text(this.isEditMode ? `编辑${this.getActionTypeName()}` : `添加${this.getActionTypeName()}`)
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .flexGrow(1)
-          .textAlign(TextAlign.Center)
-
-        Button('保存')
-          .fontSize(16)
-          .backgroundColor(Color.Transparent)
-          .fontColor('#007DFF')
-          .onClick(() => {
-            this.handleSave();
-          })
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#ffffff')
+      // 统一顶部标题栏（需要避让状态栏）
+      CommonTopBar({
+        title: this.isEditMode ? `编辑${this.getActionTypeName()}` : `添加${this.getActionTypeName()}`,
+        avoidStatusBar: true, // 自定义对话框需要避让状态栏
+        onLeftClick: () => { this.handleCancel(); },
+        onRightClick: () => { this.handleSave(); }
+      })
 
       Divider()
 
@@ -238,6 +350,10 @@ export struct ActionConfigEditor {
       this.buildOpenUrlForm();
     } else if (this.action.type === ActionType.NOTIFICATION) {
       this.buildNotificationForm();
+    } else if (this.action.type === ActionType.SET_VARIABLE) {
+      this.buildSetVariableForm();
+    } else if (this.action.type === ActionType.IF_ELSE) {
+      this.buildIfElseForm();
     } else {
       Text('暂不支持此动作类型的配置')
         .fontSize(14)
@@ -266,7 +382,7 @@ export struct ActionConfigEditor {
             .backgroundColor(this.configData['operation'] === 'read' ? '#007DFF' : '#f0f0f0')
             .fontColor(this.configData['operation'] === 'read' ? '#ffffff' : '#333333')
             .onClick(() => {
-              this.configData['operation'] = 'read';
+              this.updateConfigData('operation', 'read');
             })
 
           Button('写入')
@@ -275,7 +391,7 @@ export struct ActionConfigEditor {
             .backgroundColor(this.configData['operation'] === 'write' ? '#007DFF' : '#f0f0f0')
             .fontColor(this.configData['operation'] === 'write' ? '#ffffff' : '#333333')
             .onClick(() => {
-              this.configData['operation'] = 'write';
+              this.updateConfigData('operation', 'write');
             })
         }
       }
@@ -295,7 +411,7 @@ export struct ActionConfigEditor {
           })
             .fontSize(14)
             .onChange((value: string) => {
-              this.configData['saveToVariable'] = value;
+              this.updateConfigData('saveToVariable', value);
             })
 
           Text('变量命名规则：字母开头，可含数字和下划线')
@@ -320,7 +436,7 @@ export struct ActionConfigEditor {
             .fontSize(14)
             .height(100)
             .onChange((value: string) => {
-              this.configData['content'] = value;
+              this.updateConfigData('content', value);
             })
 
           Text('支持引用变量，例如：{clipboard_content}')
@@ -394,7 +510,7 @@ export struct ActionConfigEditor {
             .fontSize(14)
             .flexGrow(1)
             .onChange((value: string) => {
-              this.configData['input'] = value;
+              this.updateConfigData('input', value);
             })
 
           Button('选择变量')
@@ -440,7 +556,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['saveToVariable'] = value;
+            this.updateConfigData('saveToVariable', value);
           })
 
         Text('变量命名规则：字母开头，可含数字和下划线')
@@ -468,7 +584,7 @@ export struct ActionConfigEditor {
       .backgroundColor(this.configData['operation'] === operation ? '#007DFF' : '#f0f0f0')
       .fontColor(this.configData['operation'] === operation ? '#ffffff' : '#333333')
       .onClick(() => {
-        this.configData['operation'] = operation;
+        this.updateConfigData('operation', operation);
       })
   }
 
@@ -490,7 +606,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['pattern'] = value;
+            this.updateConfigData('pattern', value);
           })
 
         Text('常用模板：')
@@ -520,7 +636,7 @@ export struct ActionConfigEditor {
           .fontSize(14)
           .type(InputType.Number)
           .onChange((value: string) => {
-            this.configData['groupIndex'] = Number(value) || 0;
+            this.updateConfigData('groupIndex', Number(value) || 0);
           })
 
         Text('0 表示完整匹配，1 表示第一个捕获组')
@@ -546,7 +662,7 @@ export struct ActionConfigEditor {
       .backgroundColor('#e6f7ff')
       .fontColor('#1890ff')
       .onClick(() => {
-        this.configData['pattern'] = pattern;
+        this.updateConfigData('pattern', pattern);
       })
   }
 
@@ -568,7 +684,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['searchValue'] = value;
+            this.updateConfigData('searchValue', value);
           })
       }
       .alignItems(HorizontalAlign.Start)
@@ -586,7 +702,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['replaceValue'] = value;
+            this.updateConfigData('replaceValue', value);
           })
 
         Text('支持引用变量，例如：{var_name}')
@@ -615,7 +731,7 @@ export struct ActionConfigEditor {
       })
         .fontSize(14)
         .onChange((value: string) => {
-          this.configData['separator'] = value;
+          this.updateConfigData('separator', value);
         })
 
       Text('用于分割文本的字符或字符串')
@@ -646,7 +762,7 @@ export struct ActionConfigEditor {
             .backgroundColor(this.configData['method'] === 'GET' ? '#007DFF' : '#f0f0f0')
             .fontColor(this.configData['method'] === 'GET' ? '#ffffff' : '#333333')
             .onClick(() => {
-              this.configData['method'] = 'GET';
+              this.updateConfigData('method', 'GET');
             })
 
           Button('POST')
@@ -656,7 +772,7 @@ export struct ActionConfigEditor {
             .backgroundColor(this.configData['method'] === 'POST' ? '#007DFF' : '#f0f0f0')
             .fontColor(this.configData['method'] === 'POST' ? '#ffffff' : '#333333')
             .onClick(() => {
-              this.configData['method'] = 'POST';
+              this.updateConfigData('method', 'POST');
             })
 
           Button('PUT')
@@ -666,7 +782,7 @@ export struct ActionConfigEditor {
             .backgroundColor(this.configData['method'] === 'PUT' ? '#007DFF' : '#f0f0f0')
             .fontColor(this.configData['method'] === 'PUT' ? '#ffffff' : '#333333')
             .onClick(() => {
-              this.configData['method'] = 'PUT';
+              this.updateConfigData('method', 'PUT');
             })
 
           Button('DELETE')
@@ -676,7 +792,7 @@ export struct ActionConfigEditor {
             .backgroundColor(this.configData['method'] === 'DELETE' ? '#007DFF' : '#f0f0f0')
             .fontColor(this.configData['method'] === 'DELETE' ? '#ffffff' : '#333333')
             .onClick(() => {
-              this.configData['method'] = 'DELETE';
+              this.updateConfigData('method', 'DELETE');
             })
         }
       }
@@ -695,7 +811,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['url'] = value;
+            this.updateConfigData('url', value);
           })
 
         Text('支持引用变量，例如：https://api.com/{extracted_url}')
@@ -717,11 +833,9 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            if (!this.configData['headers']) {
-              const emptyHeaders: Record<string, string> = {};
-              this.configData['headers'] = emptyHeaders;
-            }
-            (this.configData['headers'] as Record<string, string>)['Content-Type'] = value;
+            const headers = this.configData['headers'] as Record<string, string> || {};
+            headers['Content-Type'] = value;
+            this.updateConfigData('headers', headers);
           })
       }
       .alignItems(HorizontalAlign.Start)
@@ -741,7 +855,7 @@ export struct ActionConfigEditor {
             .fontSize(14)
             .height(150)
             .onChange((value: string) => {
-              this.configData['body'] = value;
+              this.updateConfigData('body', value);
             })
 
           Text('支持引用变量，例如：{"url": "{extracted_url}"}')
@@ -765,7 +879,7 @@ export struct ActionConfigEditor {
           .fontSize(14)
           .type(InputType.Number)
           .onChange((value: string) => {
-            this.configData['timeout'] = Number(value) || 30000;
+            this.updateConfigData('timeout', Number(value) || 30000);
           })
       }
       .alignItems(HorizontalAlign.Start)
@@ -783,7 +897,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['saveResponseTo'] = value;
+            this.updateConfigData('saveResponseTo', value);
           })
 
         Text('留空则不保存响应')
@@ -845,7 +959,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['title'] = value;
+            this.updateConfigData('title', value);
           })
       }
       .alignItems(HorizontalAlign.Start)
@@ -863,7 +977,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['message'] = value;
+            this.updateConfigData('message', value);
           })
       }
       .alignItems(HorizontalAlign.Start)
@@ -885,7 +999,7 @@ export struct ActionConfigEditor {
             .onChange((value: string) => {
               // 按行分割选项
               const options = value.split('\n').filter(line => line.trim().length > 0);
-              this.configData['options'] = options;
+              this.updateConfigData('options', options);
             })
 
           Text('每行输入一个选项')
@@ -911,7 +1025,7 @@ export struct ActionConfigEditor {
             })
               .fontSize(14)
               .onChange((value: string) => {
-                this.configData['placeholder'] = value;
+                this.updateConfigData('placeholder', value);
               })
           }
           .alignItems(HorizontalAlign.Start)
@@ -929,7 +1043,7 @@ export struct ActionConfigEditor {
             })
               .fontSize(14)
               .onChange((value: string) => {
-                this.configData['defaultValue'] = value;
+                this.updateConfigData('defaultValue', value);
               })
           }
           .alignItems(HorizontalAlign.Start)
@@ -950,7 +1064,7 @@ export struct ActionConfigEditor {
         })
           .fontSize(14)
           .onChange((value: string) => {
-            this.configData['saveToVariable'] = value;
+            this.updateConfigData('saveToVariable', value);
           })
 
         Text('留空则不保存用户输入')
@@ -978,8 +1092,661 @@ export struct ActionConfigEditor {
       .backgroundColor(this.configData['type'] === type ? '#007DFF' : '#f0f0f0')
       .fontColor(this.configData['type'] === type ? '#ffffff' : '#333333')
       .onClick(() => {
-        this.configData['type'] = type;
+        this.updateConfigData('type', type);
       })
+  }
+
+  /**
+   * 构建条件分支配置表单
+   */
+  @Builder
+  buildIfElseForm() {
+    if (this.showBranchEditor) {
+      this.buildBranchEditor();
+    } else {
+      this.buildBranchList();
+    }
+  }
+
+  /**
+   * 构建分支列表视图
+   */
+  @Builder
+  buildBranchList() {
+    Column({ space: 16 }) {
+      // 标题和添加按钮
+      Row() {
+        Text('条件分支')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#333333')
+          .flexGrow(1)
+
+        Button('添加分支')
+          .fontSize(14)
+          .height(36)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor('#007DFF')
+          .borderRadius(18)
+          .onClick(() => {
+            this.addBranch();
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      // 分支列表
+      if (this.branches.length === 0) {
+        Column() {
+          Text('暂无分支')
+            .fontSize(14)
+            .fontColor('#999999')
+            .padding(40)
+
+          Button('创建第一个分支')
+            .fontSize(14)
+            .height(40)
+            .padding({ left: 20, right: 20 })
+            .backgroundColor('#007DFF')
+            .borderRadius(20)
+            .onClick(() => {
+              this.addBranch();
+            })
+        }
+        .width('100%')
+        .padding(40)
+        .backgroundColor('#fafafa')
+        .borderRadius(12)
+        .border({ width: 2, color: '#e0e0e0', style: BorderStyle.Dashed })
+      } else {
+        ForEach(this.branches, (branch: BranchConfig, index: number) => {
+          this.buildBranchCard(branch, index);
+        }, (branch: BranchConfig, index: number) => `${index}`)
+      }
+
+      // 说明文本
+      Column({ space: 8 }) {
+        Text('使用说明')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#666666')
+          .alignSelf(ItemAlign.Start)
+
+        Column({ space: 4 }) {
+          Text('• 按顺序评估分支条件，第一个满足条件的分支将被执行')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+          Text('• 最后一个空条件的分支将作为 else 分支')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor('#fff7e6')
+      .borderRadius(8)
+    }
+    .width('100%')
+    .padding(16)
+  }
+
+  /**
+   * 构建单个分支卡片
+   */
+  @Builder
+  buildBranchCard(branch: BranchConfig, index: number) {
+    Column({ space: 12 }) {
+      // 分支标题栏
+      Row() {
+        Column({ space: 4 }) {
+          Text(branch.name || `分支 ${index + 1}`)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#333333')
+
+          if (branch.conditions.length === 0) {
+            Text('else 分支（默认执行）')
+              .fontSize(12)
+              .fontColor('#ff9800')
+          } else {
+            Text(`${branch.conditions.length} 个条件 · ${branch.actions.length} 个动作`)
+              .fontSize(12)
+              .fontColor('#666666')
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .flexGrow(1)
+
+        Row({ space: 8 }) {
+          Button('编辑')
+            .fontSize(12)
+            .height(32)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor('#e6f7ff')
+            .fontColor('#1890ff')
+            .onClick(() => {
+              this.editBranch(index);
+            })
+
+          Button('删除')
+            .fontSize(12)
+            .height(32)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor('#fff1f0')
+            .fontColor('#ff4d4f')
+            .onClick(() => {
+              this.deleteBranch(index);
+            })
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Divider()
+
+      // 条件预览
+      if (branch.conditions.length > 0) {
+        Column({ space: 8 }) {
+          Text('条件')
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#666666')
+            .alignSelf(ItemAlign.Start)
+
+          Column({ space: 6 }) {
+            ForEach(branch.conditions, (condition: BranchCondition, condIndex: number) => {
+              Row({ space: 8 }) {
+                Text(condition.field)
+                  .fontSize(13)
+                  .fontColor('#1890ff')
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                Text(condition.operator)
+                  .fontSize(13)
+                  .fontColor('#666666')
+
+                Text(condition.value)
+                  .fontSize(13)
+                  .fontColor('#52c41a')
+                  .flexGrow(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Center)
+            }, (condition: BranchCondition, condIndex: number) => `${condIndex}`)
+          }
+          .width('100%')
+          .padding(12)
+          .backgroundColor('#f9f9f9')
+          .borderRadius(6)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+
+      // 动作预览
+      if (branch.actions.length > 0) {
+        Column({ space: 8 }) {
+          Text('执行动作')
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#666666')
+            .alignSelf(ItemAlign.Start)
+
+          Flex({ wrap: FlexWrap.Wrap }) {
+            ForEach(branch.actions.slice(0, 3), (action: BaseBranchActionConfig, actionIndex: number) => {
+              Text(this.getActionTypeLabel(action.type))
+                .fontSize(12)
+                .fontColor('#666666')
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor('#f0f0f0')
+                .borderRadius(4)
+            }, (action: BaseBranchActionConfig, actionIndex: number) => `${actionIndex}`)
+
+            if (branch.actions.length > 3) {
+              Text(`+${branch.actions.length - 3}`)
+                .fontSize(12)
+                .fontColor('#999999')
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor('#f0f0f0')
+                .borderRadius(4)
+            }
+          }
+          .width('100%')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor('#ffffff')
+    .borderRadius(12)
+    .shadow({ radius: 8, color: '#0000000d', offsetX: 0, offsetY: 2 })
+  }
+
+  /**
+   * 构建分支编辑器
+   */
+  @Builder
+  buildBranchEditor() {
+    Column({ space: 16 }) {
+      // 返回按钮
+      Button('← 返回分支列表')
+        .fontSize(14)
+        .height(36)
+        .backgroundColor('#f5f5f5')
+        .fontColor('#666666')
+        .borderRadius(18)
+        .onClick(() => {
+          this.showBranchEditor = false;
+        })
+        .alignSelf(ItemAlign.Start)
+
+      // 分支名称
+      Column({ space: 8 }) {
+        Text('分支名称')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#333333')
+          .alignSelf(ItemAlign.Start)
+
+        TextInput({
+          placeholder: '例如：条件分支 1',
+          text: this.branches[this.editingBranchIndex].name
+        })
+          .fontSize(14)
+          .height(44)
+          .padding({ left: 12, right: 12 })
+          .backgroundColor('#f5f5f5')
+          .borderRadius(8)
+          .onChange((value: string) => {
+            const branch = this.branches[this.editingBranchIndex];
+            branch.name = value;
+            this.updateBranchInConfig();
+          })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 条件列表
+      Column({ space: 12 }) {
+        Row() {
+          Text('条件')
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#333333')
+            .flexGrow(1)
+
+          Button('添加条件')
+            .fontSize(12)
+            .height(32)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor('#e6f7ff')
+            .fontColor('#1890ff')
+            .borderRadius(16)
+            .onClick(() => {
+              this.addCondition();
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        if (this.branches[this.editingBranchIndex].conditions.length === 0) {
+          Column() {
+            Text('else 分支（无条件）')
+              .fontSize(13)
+              .fontColor('#ff9800')
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor('#fff7e6')
+          .borderRadius(8)
+        } else {
+          ForEach(this.branches[this.editingBranchIndex].conditions,
+            (condition: BranchCondition, condIndex: number) => {
+              this.buildConditionCard(condition, condIndex);
+            }, (condition: BranchCondition, condIndex: number) => `${condIndex}`)
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 动作列表
+      Column({ space: 12 }) {
+        Row() {
+          Text('执行动作')
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#333333')
+            .flexGrow(1)
+
+          Button('添加动作')
+            .fontSize(12)
+            .height(32)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor('#e6f7ff')
+            .fontColor('#1890ff')
+            .borderRadius(16)
+            .onClick(() => {
+              this.addAction();
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        ForEach(this.branches[this.editingBranchIndex].actions,
+          (action: BaseBranchActionConfig, actionIndex: number) => {
+            this.buildActionCard(action, actionIndex);
+          }, (action: BaseBranchActionConfig, actionIndex: number) => `${actionIndex}`)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+    }
+    .width('100%')
+    .padding(16)
+  }
+
+  /**
+   * 构建条件卡片
+   */
+  @Builder
+  buildConditionCard(condition: BranchCondition, condIndex: number) {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        // 字段选择
+        Column({ space: 4 }) {
+          Text('字段')
+            .fontSize(11)
+            .fontColor('#999999')
+
+          TextInput({
+            placeholder: '{变量}',
+            text: condition.field
+          })
+            .fontSize(13)
+            .height(36)
+            .padding({ left: 10, right: 10 })
+            .backgroundColor('#f5f5f5')
+            .borderRadius(6)
+            .onChange((value: string) => {
+              condition.field = value;
+              this.updateBranchInConfig();
+            })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        // 操作符选择
+        Column({ space: 4 }) {
+          Text('操作符')
+            .fontSize(11)
+            .fontColor('#999999')
+
+          Select([
+            { value: '==' },
+            { value: '!=' },
+            { value: '>' },
+            { value: '<' },
+            { value: '>=' },
+            { value: '<=' },
+            { value: '包含' },
+            { value: '不包含' }
+          ])
+            .selected(this.getOperatorIndex(condition.operator))
+            .value(this.getOperatorLabel(condition.operator))
+            .font({ size: 13 })
+            .selectedOptionFont({ size: 13 })
+            .optionFont({ size: 13 })
+            .height(36)
+            .backgroundColor('#f5f5f5')
+            .borderRadius(6)
+            .onSelect((index: number, value: string) => {
+              condition.operator = value;
+              this.updateBranchInConfig();
+            })
+        }
+        .alignItems(HorizontalAlign.Start)
+
+        // 值输入
+        Column({ space: 4 }) {
+          Text('值')
+            .fontSize(11)
+            .fontColor('#999999')
+
+          TextInput({
+            placeholder: '比较值',
+            text: condition.value
+          })
+            .fontSize(13)
+            .height(36)
+            .padding({ left: 10, right: 10 })
+            .backgroundColor('#f5f5f5')
+            .borderRadius(6)
+            .onChange((value: string) => {
+              condition.value = value;
+              this.updateBranchInConfig();
+            })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      // 删除按钮
+      Row() {
+        Blank()
+        Button('删除条件')
+          .fontSize(11)
+          .height(28)
+          .padding({ left: 10, right: 10 })
+          .backgroundColor('#fff1f0')
+          .fontColor('#ff4d4f')
+          .borderRadius(14)
+          .onClick(() => {
+            this.deleteCondition(condIndex);
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor('#ffffff')
+    .borderRadius(8)
+    .border({ width: 1, color: '#e0e0e0' })
+  }
+
+  /**
+   * 构建动作卡片
+   */
+  @Builder
+  buildActionCard(action: BaseBranchActionConfig, actionIndex: number) {
+    Row({ space: 12 }) {
+      Column({ space: 4 }) {
+        Text(this.getActionTypeLabel(action.type))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#333333')
+
+        Text(this.getActionConfigSummary(action))
+          .fontSize(12)
+          .fontColor('#999999')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .flexGrow(1)
+
+      Button('删除')
+        .fontSize(11)
+        .height(28)
+        .padding({ left: 10, right: 10 })
+        .backgroundColor('#fff1f0')
+        .fontColor('#ff4d4f')
+        .borderRadius(14)
+        .onClick(() => {
+          this.deleteAction(actionIndex);
+        })
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor('#ffffff')
+    .borderRadius(8)
+    .border({ width: 1, color: '#e0e0e0' })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /**
+   * 添加分支
+   */
+  private addBranch() {
+    const newBranch: BranchConfig = {
+      name: `分支 ${this.branches.length + 1}`,
+      conditions: [],
+      actions: []
+    };
+    this.branches.push(newBranch);
+    this.editBranch(this.branches.length - 1);
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 编辑分支
+   */
+  private editBranch(index: number) {
+    this.editingBranchIndex = index;
+    this.showBranchEditor = true;
+  }
+
+  /**
+   * 删除分支
+   */
+  private deleteBranch(index: number) {
+    this.branches.splice(index, 1);
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 添加条件
+   */
+  private addCondition() {
+    const newCondition: BranchCondition = {
+      field: '{variable}',
+      operator: '==',
+      value: 'value'
+    };
+    this.branches[this.editingBranchIndex].conditions.push(newCondition);
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 删除条件
+   */
+  private deleteCondition(condIndex: number) {
+    this.branches[this.editingBranchIndex].conditions.splice(condIndex, 1);
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 添加动作
+   */
+  private addAction() {
+    const config: NotificationActionConfig = {
+      title: '通知标题',
+      content: '通知内容',
+      enableSound: false,
+      enableVibration: false
+    };
+
+    const newAction: BaseBranchActionConfig = {
+      type: 'notification',
+      config: config
+    };
+    this.branches[this.editingBranchIndex].actions.push(newAction);
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 删除动作
+   */
+  private deleteAction(actionIndex: number) {
+    this.branches[this.editingBranchIndex].actions.splice(actionIndex, 1);
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 更新配置数据
+   */
+  private updateBranchInConfig() {
+    this.updateConfigData('branches', this.branches);
+  }
+
+  /**
+   * 获取操作符标签
+   */
+  private getOperatorLabel(operator: string): string {
+    const labels: Record<string, string> = {
+      '==': '等于',
+      '!=': '不等于',
+      '>': '大于',
+      '<': '小于',
+      '>=': '大于等于',
+      '<=': '小于等于',
+      '包含': '包含',
+      '不包含': '不包含'
+    };
+    return labels[operator] || operator;
+  }
+
+  /**
+   * 获取操作符索引
+   */
+  private getOperatorIndex(operator: string): number {
+    const operators = ['==', '!=', '>', '<', '>=', '<=', '包含', '不包含'];
+    return operators.indexOf(operator);
+  }
+
+  /**
+   * 获取动作类型标签
+   */
+  private getActionTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      'notification': '发送通知',
+      'clipboard_read': '读取剪贴板',
+      'clipboard_write': '写入剪贴板',
+      'http_request': 'HTTP 请求',
+      'open_url': '打开 URL',
+      'text_process': '文本处理',
+      'launch_app': '启动应用',
+      'user_dialog': '用户对话框',
+      'set_variable': '设置变量'
+    };
+    return labels[type] || type;
+  }
+
+  /**
+   * 获取动作配置摘要
+   */
+  private getActionConfigSummary(action: BaseBranchActionConfig): string {
+    if (action.type === 'notification') {
+      const config = action.config as NotificationActionConfig;
+      return config.title || '无标题';
+    } else if (action.type === 'http_request') {
+      const config = action.config as HttpRequestActionConfig;
+      return config.url || '无 URL';
+    } else if (action.type === 'open_url') {
+      const config = action.config as OpenUrlActionConfig;
+      return config.url || '无 URL';
+    } else {
+      return '点击查看详情';
+    }
   }
 
   /**
@@ -1000,5 +1767,141 @@ export struct ActionConfigEditor {
     Text('通知配置表单（待实现）')
       .fontSize(14)
       .fontColor('#999999');
+  }
+
+  /**
+   * 构建设置变量配置表单
+   */
+  @Builder
+  buildSetVariableForm() {
+    Column({ space: 16 }) {
+      // 变量名
+      Column({ space: 8 }) {
+        Text('变量名 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        TextInput({
+          placeholder: '例如：user_input',
+          text: this.configData['variableName'] as string
+        })
+          .fontSize(14)
+          .onChange((value: string) => {
+            this.updateConfigData('variableName', value);
+          })
+
+        Text('变量名只能包含字母、数字和下划线')
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 变量值
+      Column({ space: 8 }) {
+        Text('变量值 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        TextInput({
+          placeholder: '例如：{clipboard} 或直接输入值',
+          text: this.configData['value'] as string
+        })
+          .fontSize(14)
+          .onChange((value: string) => {
+            this.updateConfigData('value', value);
+          })
+
+        Text('可直接输入常量值或引用变量 {varName}')
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 变量作用域
+      Column({ space: 8 }) {
+        Text('变量作用域 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        Row({ space: 8 }) {
+          Button('运行时')
+            .fontSize(14)
+            .height(36)
+            .flexGrow(1)
+            .backgroundColor(this.configData['scope'] === 'runtime' ? '#007DFF' : '#f0f0f0')
+            .fontColor(this.configData['scope'] === 'runtime' ? '#ffffff' : '#333333')
+            .onClick(() => {
+              this.updateConfigData('scope', 'runtime');
+            })
+
+          Button('宏级')
+            .fontSize(14)
+            .height(36)
+            .flexGrow(1)
+            .backgroundColor(this.configData['scope'] === 'macro' ? '#007DFF' : '#f0f0f0')
+            .fontColor(this.configData['scope'] === 'macro' ? '#ffffff' : '#333333')
+            .onClick(() => {
+              this.updateConfigData('scope', 'macro');
+            })
+
+          Button('全局')
+            .fontSize(14)
+            .height(36)
+            .flexGrow(1)
+            .backgroundColor(this.configData['scope'] === 'global' ? '#007DFF' : '#f0f0f0')
+            .fontColor(this.configData['scope'] === 'global' ? '#ffffff' : '#333333')
+            .onClick(() => {
+              this.updateConfigData('scope', 'global');
+            })
+        }
+        .width('100%')
+
+        // 作用域说明
+        if (this.configData['scope'] === 'runtime') {
+          Text('运行时变量仅在当前宏执行期间有效')
+            .fontSize(12)
+            .fontColor('#999999')
+        } else if (this.configData['scope'] === 'macro') {
+          Text('宏级变量持久化保存，仅在当前宏中可用')
+            .fontSize(12)
+            .fontColor('#999999')
+        } else if (this.configData['scope'] === 'global') {
+          Text('全局变量持久化保存，所有宏均可访问')
+            .fontSize(12)
+            .fontColor('#999999')
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 使用示例
+      Column({ space: 8 }) {
+        Text('使用示例')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        Column({ space: 4 }) {
+          Text('• 设置常量值: value = "Hello World"')
+            .fontSize(12)
+            .fontColor('#999999')
+          Text('• 引用变量: value = "{clipboard}"')
+            .fontSize(12)
+            .fontColor('#999999')
+          Text('• 组合使用: value = "用户输入: {user_input}"')
+            .fontSize(12)
+            .fontColor('#999999')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+        .backgroundColor('#f9f9f9')
+        .borderRadius(8)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+    }
+    .width('100%')
   }
 }

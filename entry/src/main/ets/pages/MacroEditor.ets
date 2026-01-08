@@ -7,6 +7,7 @@ import { ActionConfigSummaryGenerator } from '../utils/ActionConfigSummaryGenera
 import { VariableNameRecommender } from '../utils/VariableNameRecommender';
 import { ActionConfigEditor } from '../components/ActionConfigEditor';
 import { VariableOption } from '../components/VariableSelector';
+import { CommonTopBar, TopBarConfig } from '../components/CommonTopBar';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
 import router from '@ohos.router';
@@ -112,6 +113,8 @@ struct MacroEditor {
       const now = Date.now();
 
       if (this.isEditMode) {
+        Logger.info('MacroEditor', `Saving macro ${this.macroId} in edit mode`);
+
         // 更新宏基本信息
         await this.databaseService.updateMacro(this.macroId, {
           name: this.macroName.trim(),
@@ -119,11 +122,59 @@ struct MacroEditor {
           enabled: this.macroEnabled
         });
 
-        // 保存触发器和动作(简化版：先删除再插入)
-        // TODO: 完整实现应该比对差异，只更新变化的数据
+        Logger.info('MacroEditor', 'Macro basic info updated');
+
+        // 保存触发器和动作（先删除再插入）
+        // 1. 删除所有旧的触发器、动作、变量
+        await this.databaseService.deleteTriggersByMacroId(this.macroId);
+        await this.databaseService.deleteActionsByMacroId(this.macroId);
+        await this.databaseService.deleteVariablesByMacroId(this.macroId);
+
+        Logger.info('MacroEditor', 'Old triggers, actions, variables deleted');
+
+        // 2. 重新插入触发器
+        for (const trigger of this.triggers) {
+          await this.databaseService.insertTrigger({
+            macroId: this.macroId,
+            type: trigger.type,
+            config: trigger.config,
+            enabled: trigger.enabled
+          });
+        }
+
+        Logger.info('MacroEditor', `Inserted ${this.triggers.length} triggers`);
+
+        // 3. 重新插入动作
+        for (const action of this.actions) {
+          await this.databaseService.insertAction({
+            macroId: this.macroId,
+            type: action.type,
+            config: action.config,
+            orderIndex: action.orderIndex
+          });
+        }
+
+        Logger.info('MacroEditor', `Inserted ${this.actions.length} actions`);
+
+        // 4. 重新插入变量
+        for (const variable of this.variables) {
+          await this.databaseService.insertVariable({
+            scope: VariableScope.MACRO,
+            macroId: this.macroId,
+            name: variable.name,
+            type: variable.type,
+            value: variable.value,
+            createdAt: now,
+            updatedAt: now
+          });
+        }
+
+        Logger.info('MacroEditor', `Inserted ${this.variables.length} variables`);
 
         promptAction.showToast({ message: '宏已更新' });
       } else {
+        Logger.info('MacroEditor', 'Creating new macro');
+
         // 创建新宏
         const macro: MacroInput = {
           name: this.macroName.trim(),
@@ -133,6 +184,8 @@ struct MacroEditor {
           updatedAt: now
         };
         this.macroId = await this.databaseService.insertMacro(macro);
+
+        Logger.info('MacroEditor', `Macro created with ID: ${this.macroId}`);
 
         // 保存触发器
         for (const trigger of this.triggers) {
@@ -174,7 +227,7 @@ struct MacroEditor {
       router.back();
     } catch (error) {
       Logger.error('MacroEditor', 'Failed to save macro', error as Error);
-      promptAction.showToast({ message: '保存失败' });
+      promptAction.showToast({ message: `保存失败: ${error.message}` });
     }
   }
 
@@ -186,11 +239,16 @@ struct MacroEditor {
   }
 
   /**
-   * 更新动作视图模型
+   * c
    * 分析变量流向并生成配置摘要
    */
   private updateActionViewModels() {
-    this.actionViewModels = this.actions.map((action, index) => {
+    Logger.info('MacroEditor', `Updating action view models, actions count: ${this.actions.length}`);
+
+    // 创建新的视图模型数组（确保引用变化以触发 UI 更新）
+    const newViewModels: ActionViewModel[] = this.actions.map((action, index) => {
+      Logger.info('MacroEditor', `Processing action ${index}, config: ${action.config}`);
+
       // 获取之前已定义的变量
       const definedVars = VariableFlowAnalyzer.getDefinedVariablesBeforeAction(
         this.actions,
@@ -211,6 +269,7 @@ struct MacroEditor {
 
       // 生成配置摘要
       const summary = ActionConfigSummaryGenerator.generate(action);
+      Logger.info('MacroEditor', `Generated summary for action ${index}: ${summary}`);
 
       return ActionViewModelFactory.create(
         action,
@@ -221,6 +280,10 @@ struct MacroEditor {
         validationResult.errors
       );
     });
+
+    // 使用新数组替换以触发 @State 响应式更新
+    this.actionViewModels = newViewModels;
+    Logger.info('MacroEditor', `View models updated, new count: ${this.actionViewModels.length}`);
   }
 
   /**
@@ -314,16 +377,25 @@ struct MacroEditor {
    * 编辑动作
    */
   private handleEditAction(index: number) {
+    Logger.info('MacroEditor', `Opening action editor for index ${index}`);
+
     // 准备可用变量
     this.prepareAvailableVariables(index);
 
     // 设置编辑状态
     this.editingActionIndex = index;
 
-    // 复制动作对象（避免直接修改原对象）
+    // 深拷贝动作对象（确保每次都是新对象引用）
     this.editingAction = JSON.parse(JSON.stringify(this.actions[index])) as Action;
+    Logger.info('MacroEditor', `Editing action: ${JSON.stringify(this.editingAction)}`);
 
-    // 创建并打开编辑器对话框
+    // 销毁旧的对话框控制器（如果存在）
+    if (this.actionConfigDialogController) {
+      Logger.info('MacroEditor', 'Destroying old dialog controller');
+      this.actionConfigDialogController = null;
+    }
+
+    // 创建新的编辑器对话框
     this.actionConfigDialogController = new CustomDialogController({
       builder: ActionConfigEditor({
         action: this.editingAction!,
@@ -340,33 +412,39 @@ struct MacroEditor {
       customStyle: true
     });
 
+    Logger.info('MacroEditor', 'Opening dialog');
     this.actionConfigDialogController.open();
   }
 
   /**
-   * 保存动作配置
+   * 保存动作配置（仅更新内存，不持久化到数据库）
    */
   private handleActionConfigSave(updatedAction: Action) {
     Logger.info('MacroEditor', `Saving action config at index ${this.editingActionIndex}`);
-    Logger.info('MacroEditor', `Updated config: ${updatedAction.config}`);
+    Logger.info('MacroEditor', `Updated action ID: ${updatedAction.id}, config: ${updatedAction.config}`);
 
     if (this.editingActionIndex >= 0 && this.editingActionIndex < this.actions.length) {
       // 确保保留正确的 orderIndex
       updatedAction.orderIndex = this.editingActionIndex;
 
-      // 更新动作配置 - 使用数组替换触发响应式更新
-      const newActions = [...this.actions];
+      // 更新动作配置 - 使用 slice() 创建新数组以触发响应式更新（ArkTS 兼容）
+      const newActions: Action[] = this.actions.slice();
       newActions[this.editingActionIndex] = updatedAction;
       this.actions = newActions;
 
       Logger.info('MacroEditor', `Actions array updated, length: ${this.actions.length}`);
+      Logger.info('MacroEditor', `Updated action at index ${this.editingActionIndex}, new config: ${this.actions[this.editingActionIndex].config}`);
 
-      // 更新视图模型
-      this.updateActionViewModels();
+      // 强制清空视图模型，然后更新（确保 ForEach 重新渲染）
+      this.actionViewModels = [];
 
-      Logger.info('MacroEditor', `View models updated, length: ${this.actionViewModels.length}`);
+      // 使用 setTimeout 确保 UI 更新
+      setTimeout(() => {
+        this.updateActionViewModels();
+        Logger.info('MacroEditor', `View models updated, length: ${this.actionViewModels.length}`);
+      }, 10);
 
-      promptAction.showToast({ message: '动作配置已更新' });
+      promptAction.showToast({ message: '动作配置已更新（点击保存宏后生效）' });
     }
 
     // 关闭编辑器
@@ -688,7 +766,9 @@ struct MacroEditor {
         { text: '读取剪贴板', color: '#000000' },
         { text: 'HTTP 请求', color: '#000000' },
         { text: '打开 URL', color: '#000000' },
-        { text: '文本处理', color: '#000000' }
+        { text: '文本处理', color: '#000000' },
+        { text: '设置变量', color: '#000000' },
+        { text: '条件分支', color: '#000000' }
       ]
     }).then((result) => {
       switch (result.index) {
@@ -706,6 +786,12 @@ struct MacroEditor {
           break;
         case 4:
           this.addTextProcessAction();
+          break;
+        case 5:
+          this.addSetVariableAction();
+          break;
+        case 6:
+          this.addIfElseAction();
           break;
       }
     });
@@ -859,6 +945,107 @@ struct MacroEditor {
   }
 
   /**
+   * 添加设置变量动作
+   */
+  private addSetVariableAction() {
+    const action: Action = {
+      id: Date.now(),
+      macroId: this.macroId,
+      type: ActionType.SET_VARIABLE,
+      config: JSON.stringify({
+        variableName: 'my_variable',
+        value: '',
+        scope: 'runtime'
+      }),
+      orderIndex: this.actions.length
+    };
+    this.actions.push(action);
+    this.updateActionViewModels(); // 更新视图模型
+    promptAction.showToast({ message: '设置变量动作已添加' });
+  }
+
+  /**
+   * 添加条件分支动作
+   */
+  private addIfElseAction() {
+    // 创建一个简单的 IF_ELSE 模板
+    // 定义分支配置的类型
+    interface Condition {
+      field: string;
+      operator: string;
+      value: string;
+    }
+
+    interface NotificationConfig {
+      title: string;
+      content: string;
+      enableSound: boolean;
+      enableVibration: boolean;
+    }
+
+    interface ActionWithConfig {
+      type: string;
+      config: NotificationConfig;
+    }
+
+    interface IfElseBranchConfig {
+      name: string;
+      conditions: Condition[];
+      actions: ActionWithConfig[];
+    }
+
+    const branches: IfElseBranchConfig[] = [
+      {
+        name: '分支1',
+        conditions: [
+          {
+            field: '{variable_name}',
+            operator: '==',
+            value: 'value1'
+          }
+        ],
+        actions: [
+          {
+            type: 'notification',
+            config: {
+              title: '分支1执行',
+              content: '条件满足时执行此分支',
+              enableSound: false,
+              enableVibration: false
+            }
+          }
+        ]
+      },
+      {
+        name: 'else分支',
+        conditions: [],  // 空条件表示 else
+        actions: [
+          {
+            type: 'notification',
+            config: {
+              title: 'else分支执行',
+              content: '所有条件都不满足时执行此分支',
+              enableSound: false,
+              enableVibration: false
+            }
+          }
+        ]
+      }
+    ];
+
+    const action: Action = {
+      id: Date.now(),
+      macroId: this.macroId,
+      type: ActionType.IF_ELSE,
+      config: JSON.stringify({ branches: branches }),
+      orderIndex: this.actions.length
+    };
+    this.actions.push(action);
+    this.updateActionViewModels(); // 更新视图模型
+    promptAction.showToast({ message: '条件分支动作已添加，请在配置面板编辑' });
+  }
+
+  /**
    * 删除动作
    */
   private deleteAction(index: number) {
@@ -971,7 +1158,8 @@ struct MacroEditor {
       'open_url': '打开 URL',
       'text_process': '文本处理',
       'launch_app': '启动应用',
-      'user_dialog': '用户对话框'
+      'user_dialog': '用户对话框',
+      'set_variable': '设置变量'
     };
     return actionNames[action.type] || action.type;
   }
@@ -1108,33 +1296,12 @@ struct MacroEditor {
 
   build() {
     Column() {
-      // 顶部标题栏
-      Row() {
-        Button('取消')
-          .fontSize(16)
-          .backgroundColor(Color.Transparent)
-          .fontColor('#007DFF')
-          .onClick(() => {
-            this.handleCancel();
-          })
-
-        Text(this.isEditMode ? '编辑宏' : '创建宏')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .flexGrow(1)
-          .textAlign(TextAlign.Center)
-
-        Button('保存')
-          .fontSize(16)
-          .backgroundColor(Color.Transparent)
-          .fontColor('#007DFF')
-          .onClick(() => {
-            this.handleSave();
-          })
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#ffffff')
+      // 统一顶部标题栏
+      CommonTopBar({
+        title: this.isEditMode ? '编辑宏' : '创建宏',
+        onLeftClick: () => { this.handleCancel(); },
+        onRightClick: () => { this.handleSave(); }
+      })
 
       // 表单内容
       Scroll() {
@@ -1570,7 +1737,13 @@ struct MacroEditor {
                     }
                   }
                   .width('100%')
-                }, (viewModel: ActionViewModel) => viewModel.id?.toString() || '')
+                }, (viewModel: ActionViewModel, index: number) => {
+                  // 使用多个属性组合作为 key，确保配置变化时触发重新渲染
+                  const id = viewModel.id || 0;
+                  const summary = viewModel.configSummary || '';
+                  const valid = viewModel.isValid ? '1' : '0';
+                  return `${index}_${id}_${summary}_${valid}`;
+                })
               }
               .width('100%')
             }
