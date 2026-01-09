@@ -893,8 +893,10 @@ struct MacroEditor {
       title: '选择动作类型',
       message: '请选择要添加的动作',
       buttons: [
+        { text: '启动应用', color: '#000000' },
         { text: '发送通知', color: '#000000' },
         { text: '读取剪贴板', color: '#000000' },
+        { text: '写入剪贴板', color: '#000000' },
         { text: 'HTTP 请求', color: '#000000' },
         { text: '打开 URL', color: '#000000' },
         { text: '文本处理', color: '#000000' },
@@ -904,28 +906,55 @@ struct MacroEditor {
     }).then((result) => {
       switch (result.index) {
         case 0:
-          this.addNotificationAction();
+          this.addLaunchAppAction();
           break;
         case 1:
-          this.addClipboardReadAction();
+          this.addNotificationAction();
           break;
         case 2:
-          this.addHttpRequestAction();
+          this.addClipboardReadAction();
           break;
         case 3:
-          this.addOpenUrlAction();
+          this.addClipboardWriteAction();
           break;
         case 4:
-          this.addTextProcessAction();
+          this.addHttpRequestAction();
           break;
         case 5:
-          this.addSetVariableAction();
+          this.addOpenUrlAction();
           break;
         case 6:
+          this.addTextProcessAction();
+          break;
+        case 7:
+          this.addSetVariableAction();
+          break;
+        case 8:
           this.addIfElseAction();
           break;
       }
     });
+  }
+
+  /**
+   * 添加启动应用动作
+   */
+  private addLaunchAppAction() {
+    const action: Action = {
+      id: Date.now(),
+      macroId: this.macroId,
+      type: ActionType.LAUNCH_APP,
+      config: JSON.stringify({
+        bundleName: 'com.huawei.hmos.contacts',
+        mode: 'explicit',
+        abilityName: 'com.huawei.hmos.contacts.MainAbility',
+        parameters: {} as Record<string, Object>
+      }),
+      orderIndex: this.actions.length
+    };
+    this.actions.push(action);
+    this.updateActionViewModels(); // 更新视图模型
+    promptAction.showToast({ message: '启动应用动作已添加' });
   }
 
   /**
@@ -978,6 +1007,25 @@ struct MacroEditor {
     this.actions.push(action);
     this.updateActionViewModels(); // 更新视图模型
     promptAction.showToast({ message: `读取剪贴板动作已添加，保存到变量 ${recommendedName}` });
+  }
+
+  /**
+   * 添加写入剪贴板动作
+   */
+  private addClipboardWriteAction() {
+    const action: Action = {
+      id: Date.now(),
+      macroId: this.macroId,
+      type: ActionType.CLIPBOARD_WRITE,
+      config: JSON.stringify({
+        operation: 'write',
+        content: '{clipboard_content}'
+      }),
+      orderIndex: this.actions.length
+    };
+    this.actions.push(action);
+    this.updateActionViewModels(); // 更新视图模型
+    promptAction.showToast({ message: '写入剪贴板动作已添加' });
   }
 
   /**
