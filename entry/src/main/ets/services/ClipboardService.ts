@@ -23,15 +23,15 @@ export class ClipboardService {
    */
   async readText(): Promise<string> {
     try {
-      const pasteboardData = await pasteboard.getSystemPasteboard();
-      const hasData = await pasteboardData.hasPasteData();
+      const pasteboardData = pasteboard.getSystemPasteboard();
+      const hasData = pasteboardData.hasPasteData();
 
       if (!hasData) {
         Logger.info('ClipboardService', 'Clipboard is empty');
         return '';
       }
 
-      const pasteData = await pasteboardData.getPasteData();
+      const pasteData = await pasteboardData.getData();
       const primaryText = pasteData.getPrimaryText();
 
       if (primaryText) {
@@ -51,10 +51,10 @@ export class ClipboardService {
    */
   async writeText(text: string): Promise<void> {
     try {
-      const pasteboardData = await pasteboard.getSystemPasteboard();
+      const pasteboardData = pasteboard.getSystemPasteboard();
       const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
 
-      await pasteboardData.setPasteData(pasteData);
+      pasteboardData.setPasteData(pasteData);
 
       Logger.info('ClipboardService', `Wrote to clipboard: ${text.substring(0, 50)}...`);
     } catch (error) {
@@ -68,8 +68,8 @@ export class ClipboardService {
    */
   async clear(): Promise<void> {
     try {
-      const pasteboardData = await pasteboard.getSystemPasteboard();
-      await pasteboardData.clearData();
+      const pasteboardData = pasteboard.getSystemPasteboard();
+      pasteboardData.clearData();
 
       Logger.info('ClipboardService', 'Clipboard cleared');
     } catch (error) {

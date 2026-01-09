@@ -25,6 +25,10 @@
       "value": "需要通知权限以发送宏执行结果通知"
     },
     {
+      "name": "permission_pasteboard_reason",
+      "value": "需要剪贴板读取权限以支持读取剪贴板内容动作"
+    },
+    {
       "name": "app_name",
       "value": "鸿蒙宏"
     },
