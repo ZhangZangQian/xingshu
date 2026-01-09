@@ -929,8 +929,8 @@ export class DatabaseService {
   async insertVariable(variable: VariableInput): Promise<number> {
     if (!this.store) throw new Error('Database not initialized');
 
-    if (variable.scope === VariableScope.MACRO && variable.macroId === undefined) {
-      throw new Error('宏变量必须指定宏 ID');
+    if (variable.scope === VariableScope.GLOBAL && variable.macroId !== undefined) {
+      throw new Error('全局变量不能指定宏 ID');
     }
 
     const existing = await this.getVariableByName(variable.name, variable.scope, variable.macroId);
@@ -942,7 +942,7 @@ export class DatabaseService {
 
     const valueBucket: relationalStore.ValuesBucket = {
       scope: variable.scope,
-      macro_id: variable.scope === VariableScope.MACRO ? variable.macroId : null,
+      macro_id: null,
       name: variable.name,
       type: variable.type,
       value: serializeVariableValue(variable.value),

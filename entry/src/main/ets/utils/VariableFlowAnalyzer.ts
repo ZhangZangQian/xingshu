@@ -1,14 +1,13 @@
 import { Action, ActionType } from '../models/Macro';
-import { Variable } from '../models/Variable';
 
 /**
  * 变量流向数据结构
  */
 export interface VariableFlow {
   variableName: string;           // 变量名
-  sourceActionIndex: number;      // 来源动作索引（-1 表示宏变量或全局变量）
+  sourceActionIndex: number;      // 来源动作索引（-1 表示全局变量或系统变量）
   targetActionIndices: number[];  // 使用该变量的动作索引
-  type: 'runtime' | 'macro' | 'global' | 'system';  // 变量类型
+  type: 'runtime' | 'global' | 'system';  // 变量类型
 }
 
 /**
@@ -19,25 +18,13 @@ export class VariableFlowAnalyzer {
   /**
    * 分析动作列表中的变量流向
    * @param actions 动作列表
-   * @param macroVariables 宏变量列表
    * @returns 变量流向数组
    */
-  static analyzeFlow(actions: Action[], macroVariables: Variable[]): VariableFlow[] {
+  static analyzeFlow(actions: Action[]): VariableFlow[] {
     const flows: VariableFlow[] = [];
     const definedVariables = new Set<string>();
 
-    // 1. 添加宏变量
-    macroVariables.forEach(variable => {
-      definedVariables.add(variable.name);
-      flows.push({
-        variableName: variable.name,
-        sourceActionIndex: -1,
-        targetActionIndices: [],
-        type: 'macro'
-      });
-    });
-
-    // 2. 添加系统变量
+    // 1. 添加系统变量
     const systemVariables = ['date', 'time', 'timestamp', 'clipboard', 'network_type', 'battery_level'];
     systemVariables.forEach(varName => {
       definedVariables.add(varName);
@@ -49,7 +36,7 @@ export class VariableFlowAnalyzer {
       });
     });
 
-    // 3. 遍历动作，提取输入输出变量
+    // 2. 遍历动作，提取输入输出变量
     actions.forEach((action, index) => {
       try {
         const config = JSON.parse(action.config);
@@ -59,7 +46,7 @@ export class VariableFlowAnalyzer {
         if (outputVar) {
           definedVariables.add(outputVar);
 
-          // 检查是否已存在（可能被宏变量覆盖）
+          // 检查是否已存在
           const existingFlow = flows.find(f => f.variableName === outputVar);
           if (existingFlow) {
             // 更新来源为当前动作
@@ -248,24 +235,19 @@ export class VariableFlowAnalyzer {
    * 获取动作之前已定义的变量
    * @param actions 动作列表
    * @param actionIndex 当前动作索引
-   * @param macroVariables 宏变量列表
    * @returns 已定义的变量集合
    */
   static getDefinedVariablesBeforeAction(
     actions: Action[],
-    actionIndex: number,
-    macroVariables: Variable[]
+    actionIndex: number
   ): Set<string> {
     const definedVariables = new Set<string>();
-
-    // 添加宏变量
-    macroVariables.forEach(variable => definedVariables.add(variable.name));
 
     // 添加系统变量
     ['date', 'time', 'timestamp', 'clipboard', 'network_type', 'battery_level']
       .forEach(varName => definedVariables.add(varName));
 
-    // 添加之前动作输出的变量
+    // 添加之前动作输出的变量（包括设置变量动作）
     for (let i = 0; i < actionIndex; i++) {
       try {
         const config = JSON.parse(actions[i].config);

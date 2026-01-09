@@ -10,10 +10,10 @@ import { Variable, VariableScope, VariableType, VariableInput } from '../../mode
  * 设置变量动作执行器
  *
  * 功能特性:
- * 1. 支持设置三种作用域的变量: runtime(运行时)、global(全局)、macro(宏级)
+ * 1. 支持设置两种作用域的变量: runtime(运行时)、global(全局)
  * 2. 支持变量引用，value 可以包含 {variable_name} 格式的变量引用
  * 3. runtime 变量仅在当前执行上下文中有效
- * 4. global 和 macro 变量会持久化到数据库
+ * 4. global 变量会持久化到数据库
  */
 export class SetVariableAction implements IActionExecutor {
   async execute(action: Action, context: ExecutionContext): Promise<ActionExecutionResult> {
@@ -42,10 +42,6 @@ export class SetVariableAction implements IActionExecutor {
 
         case 'global':
           await this.setGlobalVariable(config.variableName, parsedValue, context);
-          break;
-
-        case 'macro':
-          await this.setMacroVariable(config.variableName, parsedValue, context);
           break;
 
         default:
@@ -115,41 +111,5 @@ export class SetVariableAction implements IActionExecutor {
 
     // 同时更新上下文中的全局变量缓存
     context.globalVariables.set(name, value);
-  }
-
-  /**
-   * 设置宏级变量（持久化到数据库，仅在当前宏中可见）
-   */
-  private async setMacroVariable(name: string, value: string, context: ExecutionContext): Promise<void> {
-    const databaseService = DatabaseService.getInstance();
-
-    // 检查宏变量是否已存在
-    const existingVariables = await databaseService.getVariablesByMacroId(context.macroId);
-    const existingVar = existingVariables.find(v => v.name === name);
-
-    if (existingVar) {
-      // 更新现有变量
-      await databaseService.updateVariable(existingVar.id, {
-        value: value,
-        type: VariableType.STRING
-      });
-      Logger.info('SetVariableAction', `Macro variable '${name}' updated to: ${value}`);
-    } else {
-      // 创建新变量
-      const newVar: VariableInput = {
-        name: name,
-        value: value,
-        type: VariableType.STRING,
-        scope: VariableScope.MACRO,
-        macroId: context.macroId,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      await databaseService.insertVariable(newVar);
-      Logger.info('SetVariableAction', `Macro variable '${name}' created with value: ${value}`);
-    }
-
-    // 同时更新上下文中的宏变量缓存
-    context.macroVariables.set(name, value);
   }
 }

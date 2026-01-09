@@ -235,7 +235,7 @@ export interface UserDialogConfig {
 export interface SetVariableConfig {
   variableName: string;            // 变量名
   value: string;                   // 变量值（支持变量引用，如 {clipboard}）
-  scope: 'runtime' | 'global' | 'macro';  // 变量作用域
+  scope: 'runtime' | 'global';     // 变量作用域
 }
 
 /**

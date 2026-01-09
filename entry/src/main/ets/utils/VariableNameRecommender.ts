@@ -109,17 +109,12 @@ export class VariableNameRecommender {
   /**
    * 从现有动作列表中提取所有已定义的变量名
    * @param actions 动作列表
-   * @param macroVariables 宏变量列表
    * @returns 已定义的变量名集合
    */
   static extractExistingVariableNames(
-    actions: Array<{ config: string }>,
-    macroVariables: Array<{ name: string }>
+    actions: Array<{ config: string }>
   ): Set<string> {
     const variableNames = new Set<string>();
-
-    // 添加宏变量
-    macroVariables.forEach(v => variableNames.add(v.name));
 
     // 添加系统变量
     ['date', 'time', 'timestamp', 'clipboard', 'network_type', 'battery_level']

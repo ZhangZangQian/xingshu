@@ -11,7 +11,6 @@ export class ExecutionContextImpl {
   triggerType: TriggerType;
   variables: Map<string, Object>;
   globalVariables: Map<string, Object>;
-  macroVariables: Map<string, Object>;
   startTime: number;
 
   constructor(macroId: number, triggerType: TriggerType) {
@@ -19,7 +18,6 @@ export class ExecutionContextImpl {
     this.triggerType = triggerType;
     this.variables = new Map<string, Object>();
     this.globalVariables = new Map<string, Object>();
-    this.macroVariables = new Map<string, Object>();
     this.startTime = Date.now();
   }
 
@@ -35,11 +33,7 @@ export class ExecutionContextImpl {
       this.globalVariables.set(v.name, v.value);
     }
 
-    // 加载宏变量
-    const macroVars = await databaseService.getVariablesByMacroId(this.macroId);
-    for (const v of macroVars) {
-      this.macroVariables.set(v.name, v.value);
-    }
+    // 宏变量已移除，通过"设置变量"动作在运行时创建
   }
 
   /**
@@ -50,7 +44,7 @@ export class ExecutionContextImpl {
   }
 
   /**
-   * 获取变量 (三级解析: system → macro → global)
+   * 获取变量 (三级解析: system → runtime → global)
    */
   async getVariable(name: string): Promise<Object | undefined> {
     // 1. 先查找系统变量
@@ -64,12 +58,7 @@ export class ExecutionContextImpl {
       return this.variables.get(name);
     }
 
-    // 3. 再查找宏变量
-    if (this.macroVariables.has(name)) {
-      return this.macroVariables.get(name);
-    }
-
-    // 4. 最后查找全局变量
+    // 3. 最后查找全局变量
     if (this.globalVariables.has(name)) {
       return this.globalVariables.get(name);
     }
