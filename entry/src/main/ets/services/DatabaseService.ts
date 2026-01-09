@@ -21,7 +21,6 @@ export class DatabaseService {
   private static instance: DatabaseService;
   private store: relationalStore.RdbStore | null = null;
   private static readonly DB_NAME = 'HarmonyMacro.db';
-  private static readonly DB_VERSION = 1;
 
   private constructor() {
   }
@@ -34,7 +33,7 @@ export class DatabaseService {
   }
 
   /**
-   * 初始化数据库
+   * 初始化数据库（智能检测：只在需要时重建）
    */
   async initialize(context: Context): Promise<void> {
     if (this.store) {
@@ -44,18 +43,69 @@ export class DatabaseService {
 
     Logger.info('DatabaseService', 'Initializing database...');
 
-    const config: relationalStore.StoreConfig = {
-      name: DatabaseService.DB_NAME,
-      securityLevel: relationalStore.SecurityLevel.S1
-    };
-
     try {
+      const config: relationalStore.StoreConfig = {
+        name: DatabaseService.DB_NAME,
+        securityLevel: relationalStore.SecurityLevel.S1
+      };
+
+      // 尝试打开数据库
       this.store = await relationalStore.getRdbStore(context, config);
-      await this.createTables();
+
+      // 检查是否需要重建数据库（检测约束是否包含新类型）
+      const needsRebuild = await this.checkNeedsRebuild();
+
+      if (needsRebuild) {
+        Logger.info('DatabaseService', 'Database needs rebuild, recreating...');
+        // 关闭当前数据库连接
+        this.store = null;
+        // 删除旧数据库
+        await relationalStore.deleteRdbStore(context, DatabaseService.DB_NAME);
+        // 重新创建数据库
+        this.store = await relationalStore.getRdbStore(context, config);
+        await this.createTables();
+        Logger.info('DatabaseService', 'Database rebuilt successfully');
+      } else {
+        Logger.info('DatabaseService', 'Database is up to date');
+      }
+
       Logger.info('DatabaseService', 'Database initialized successfully');
     } catch (error) {
       Logger.error('DatabaseService', 'Failed to initialize database', error as Error);
       throw new Error(`数据库初始化失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 检查数据库是否需要重建
+   * @returns true 如果需要重建，false 如果不需要
+   */
+  private async checkNeedsRebuild(): Promise<boolean> {
+    if (!this.store) {
+      return true;
+    }
+
+    try {
+      // 尝试插入一个测试记录，检查是否包含新的动作类型约束
+      const testAction: relationalStore.ValuesBucket = {
+        macro_id: -1,
+        type: 'set_variable',
+        config: '{}',
+        order_index: 0
+      };
+
+      await this.store.insert('action', testAction);
+
+      // 如果插入成功，说明约束已包含新类型，删除测试记录
+      const predicates = new relationalStore.RdbPredicates('action');
+      predicates.equalTo('macro_id', -1);
+      await this.store.delete(predicates);
+
+      return false;
+    } catch (error) {
+      // 如果插入失败，说明约束不包含新类型，需要重建
+      Logger.info('DatabaseService', 'Database constraint check failed, needs rebuild');
+      return true;
     }
   }
 
@@ -104,7 +154,8 @@ export class DatabaseService {
         type TEXT NOT NULL CHECK(type IN (
           'launch_app', 'notification', 'http_request',
           'clipboard_read', 'clipboard_write',
-          'open_url', 'text_process', 'user_dialog'
+          'open_url', 'text_process', 'user_dialog',
+          'set_variable', 'if_else'
         )),
         config TEXT NOT NULL,
         order_index INTEGER NOT NULL DEFAULT 0,
@@ -183,16 +234,7 @@ export class DatabaseService {
 
       // 创建索引
       `CREATE INDEX IF NOT EXISTS idx_variable_scope ON variable(scope)`,
-      `CREATE INDEX IF NOT EXISTS idx_variable_macro_id ON variable(macro_id)`,
-
-      // 数据库版本表
-      `CREATE TABLE IF NOT EXISTS db_version (
-        version INTEGER PRIMARY KEY,
-        applied_at INTEGER NOT NULL
-      )`,
-
-      // 插入初始版本
-      `INSERT OR IGNORE INTO db_version (version, applied_at) VALUES (${DatabaseService.DB_VERSION}, ${Date.now()})`
+      `CREATE INDEX IF NOT EXISTS idx_variable_macro_id ON variable(macro_id)`
     ];
 
     for (const sql of createTableSQLs) {

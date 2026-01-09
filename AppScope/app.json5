@@ -1,7 +1,7 @@
 {
   "app": {
-    "bundleName": "com.example.harmonymacro",
-    "vendor": "example",
+    "bundleName": "com.zhangyong.xingshu",
+    "vendor": "张勇",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:app_icon",
