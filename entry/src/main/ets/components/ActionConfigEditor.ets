@@ -264,6 +264,18 @@ export struct ActionConfigEditor {
         }
         break;
 
+      case ActionType.LAUNCH_APP:
+        if (!this.configData['bundleName']) {
+          errors.push('应用包名不能为空');
+        }
+        if (this.configData['mode'] === 'explicit' && !this.configData['abilityName']) {
+          errors.push('显式启动需要指定组件名');
+        }
+        if (this.configData['mode'] === 'implicit' && !this.configData['action'] && !this.configData['uri']) {
+          errors.push('隐式启动需要指定 action 或 uri');
+        }
+        break;
+
       case ActionType.SET_VARIABLE:
         if (!this.configData['variableName']) {
           errors.push('变量名不能为空');
@@ -303,6 +315,208 @@ export struct ActionConfigEditor {
       'if_else': '条件分支'
     };
     return names[this.action.type] || this.action.type;
+  }
+
+  /**
+   * 构建启动应用配置表单
+   */
+  @Builder
+  buildLaunchAppForm() {
+    Column({ space: 16 }) {
+      // 启动模式
+      Column({ space: 8 }) {
+        Text('启动模式 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        Row({ space: 8 }) {
+          Button('显式启动')
+            .fontSize(14)
+            .height(36)
+            .flexGrow(1)
+            .backgroundColor(this.configData['mode'] === 'explicit' ? '#007DFF' : '#f0f0f0')
+            .fontColor(this.configData['mode'] === 'explicit' ? '#ffffff' : '#333333')
+            .onClick(() => {
+              this.updateConfigData('mode', 'explicit');
+            })
+
+          Button('隐式启动')
+            .fontSize(14)
+            .height(36)
+            .flexGrow(1)
+            .backgroundColor(this.configData['mode'] === 'implicit' ? '#007DFF' : '#f0f0f0')
+            .fontColor(this.configData['mode'] === 'implicit' ? '#ffffff' : '#333333')
+            .onClick(() => {
+              this.updateConfigData('mode', 'implicit');
+            })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 应用包名
+      Column({ space: 8 }) {
+        Text('应用包名 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        TextInput({
+          placeholder: '例如：com.huawei.hmos.contacts',
+          text: this.configData['bundleName'] as string
+        })
+          .fontSize(14)
+          .onChange((value: string) => {
+            this.updateConfigData('bundleName', value);
+          })
+
+        Text('HarmonyOS 应用的唯一标识符')
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 显式启动：组件名
+      if (this.configData['mode'] === 'explicit') {
+        Column({ space: 8 }) {
+          Text('组件名 *')
+            .fontSize(14)
+            .fontColor('#666666')
+
+          TextInput({
+            placeholder: '例如：com.huawei.hmos.contacts.MainAbility',
+            text: this.configData['abilityName'] as string
+          })
+            .fontSize(14)
+            .onChange((value: string) => {
+              this.updateConfigData('abilityName', value);
+            })
+
+          Text('完整类名，包含包名')
+            .fontSize(12)
+            .fontColor('#999999')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+
+      // 隐式启动配置
+      if (this.configData['mode'] === 'implicit') {
+        Column({ space: 16 }) {
+          // Action
+          Column({ space: 8 }) {
+            Text('Action（可选）')
+              .fontSize(14)
+              .fontColor('#666666')
+
+            TextInput({
+              placeholder: '例如：ohos.want.action.VIEW',
+              text: this.configData['action'] as string
+            })
+              .fontSize(14)
+              .onChange((value: string) => {
+                this.updateConfigData('action', value);
+              })
+
+            Text('常用的：ohos.want.action.VIEW、ohos.want.action.DIAL')
+              .fontSize(12)
+              .fontColor('#999999')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+
+          // URI
+          Column({ space: 8 }) {
+            Text('URI（可选）')
+              .fontSize(14)
+              .fontColor('#666666')
+
+            TextInput({
+              placeholder: '例如：https://example.com 或 tel:123456789',
+              text: this.configData['uri'] as string
+            })
+              .fontSize(14)
+              .onChange((value: string) => {
+                this.updateConfigData('uri', value);
+              })
+
+            Text('支持引用变量，例如：{url_variable}')
+              .fontSize(12)
+              .fontColor('#999999')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+
+      // 启动参数
+      Column({ space: 8 }) {
+        Text('启动参数（可选）')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        TextArea({
+          placeholder: 'JSON 格式的键值对，例如：\n{"key1": "value1", "key2": "value2"}',
+          text: this.configData['parameters'] ? JSON.stringify(this.configData['parameters'], null, 2) : ''
+        })
+          .fontSize(14)
+          .height(120)
+          .onChange((value: string) => {
+            try {
+              if (value.trim()) {
+                const params: Record<string, Object> = JSON.parse(value);
+                this.updateConfigData('parameters', params);
+              } else {
+                this.updateConfigData('parameters', {} as Record<string, Object>);
+              }
+            } catch (error) {
+              // JSON 解析错误，暂不处理，用户可能在输入中
+            }
+          })
+
+        Text('将作为 Want.parameters 传递给目标应用')
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 使用说明
+      Column({ space: 8 }) {
+        Text('使用说明')
+          .fontSize(14)
+          .fontColor('#666666')
+          .alignSelf(ItemAlign.Start)
+
+        Column({ space: 4 }) {
+          Text('• 显式启动：直接指定应用包名和组件名，推荐用于已知应用')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+          Text('• 隐式启动：通过 action 或 uri 启动，系统自动匹配应用')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+          Text('• 获取包名：使用 DevEco Studio 的 HAP 查看工具')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+      .backgroundColor('#f9f9f9')
+      .borderRadius(8)
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor('#ffffff')
+    .borderRadius(8)
   }
 
   build() {
@@ -350,6 +564,8 @@ export struct ActionConfigEditor {
       this.buildOpenUrlForm();
     } else if (this.action.type === ActionType.NOTIFICATION) {
       this.buildNotificationForm();
+    } else if (this.action.type === ActionType.LAUNCH_APP) {
+      this.buildLaunchAppForm();
     } else if (this.action.type === ActionType.SET_VARIABLE) {
       this.buildSetVariableForm();
     } else if (this.action.type === ActionType.IF_ELSE) {
@@ -1750,23 +1966,215 @@ export struct ActionConfigEditor {
   }
 
   /**
-   * 构建打开 URL 配置表单（占位）
+   * 构建打开 URL 配置表单
    */
   @Builder
   buildOpenUrlForm() {
-    Text('打开 URL 配置表单（待实现）')
-      .fontSize(14)
-      .fontColor('#999999');
+    Column({ space: 16 }) {
+      // URL
+      Column({ space: 8 }) {
+        Text('URL *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        TextInput({
+          placeholder: '例如：https://example.com',
+          text: this.configData['url'] as string
+        })
+          .fontSize(14)
+          .onChange((value: string) => {
+            this.updateConfigData('url', value);
+          })
+
+        Text('支持引用变量，例如：{extracted_url}')
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 打开方式
+      Column({ space: 8 }) {
+        Text('打开方式 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        Row({ space: 8 }) {
+          Button('浏览器')
+            .fontSize(14)
+            .height(36)
+            .flexGrow(1)
+            .backgroundColor(this.configData['openWith'] === 'browser' ? '#007DFF' : '#f0f0f0')
+            .fontColor(this.configData['openWith'] === 'browser' ? '#ffffff' : '#333333')
+            .onClick(() => {
+              this.updateConfigData('openWith', 'browser');
+            })
+
+          Button('应用内')
+            .fontSize(14)
+            .height(36)
+            .flexGrow(1)
+            .backgroundColor(this.configData['openWith'] === 'app' ? '#007DFF' : '#f0f0f0')
+            .fontColor(this.configData['openWith'] === 'app' ? '#ffffff' : '#333333')
+            .onClick(() => {
+              this.updateConfigData('openWith', 'app');
+            })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 使用说明
+      Column({ space: 8 }) {
+        Text('使用说明')
+          .fontSize(14)
+          .fontColor('#666666')
+          .alignSelf(ItemAlign.Start)
+
+        Column({ space: 4 }) {
+          Text('• 浏览器：使用系统浏览器打开链接')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+          Text('• 应用内：在应用内 WebView 中打开')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+      .backgroundColor('#f9f9f9')
+      .borderRadius(8)
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor('#ffffff')
+    .borderRadius(8)
   }
 
   /**
-   * 构建通知配置表单（占位）
+   * 构建通知配置表单
    */
   @Builder
   buildNotificationForm() {
-    Text('通知配置表单（待实现）')
-      .fontSize(14)
-      .fontColor('#999999');
+    Column({ space: 16 }) {
+      // 通知标题
+      Column({ space: 8 }) {
+        Text('通知标题 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        TextInput({
+          placeholder: '例如：任务完成',
+          text: this.configData['title'] as string
+        })
+          .fontSize(14)
+          .onChange((value: string) => {
+            this.updateConfigData('title', value);
+          })
+
+        Text('支持引用变量，例如：{variable_name}')
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 通知内容
+      Column({ space: 8 }) {
+        Text('通知内容 *')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        TextArea({
+          placeholder: '输入通知内容',
+          text: this.configData['content'] as string
+        })
+          .fontSize(14)
+          .height(100)
+          .onChange((value: string) => {
+            this.updateConfigData('content', value);
+          })
+
+        Text('支持引用变量，例如：处理了 {count} 条记录')
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 通知选项
+      Column({ space: 16 }) {
+        Text('通知选项')
+          .fontSize(14)
+          .fontColor('#666666')
+
+        Row({ space: 8 }) {
+          // 提示音
+          Row({ space: 8 }) {
+            Text('提示音')
+              .fontSize(14)
+              .fontColor('#333333')
+
+            Toggle({ type: ToggleType.Switch, isOn: this.configData['enableSound'] as boolean || false })
+              .onChange((isOn: boolean) => {
+                this.updateConfigData('enableSound', isOn);
+              })
+          }
+          .flexGrow(1)
+
+          // 震动
+          Row({ space: 8 }) {
+            Text('震动')
+              .fontSize(14)
+              .fontColor('#333333')
+
+            Toggle({ type: ToggleType.Switch, isOn: this.configData['enableVibration'] as boolean || false })
+              .onChange((isOn: boolean) => {
+                this.updateConfigData('enableVibration', isOn);
+              })
+          }
+          .flexGrow(1)
+        }
+        .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      // 使用说明
+      Column({ space: 8 }) {
+        Text('使用说明')
+          .fontSize(14)
+          .fontColor('#666666')
+          .alignSelf(ItemAlign.Start)
+
+        Column({ space: 4 }) {
+          Text('• 提示音：通知到达时播放系统提示音')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+          Text('• 震动：通知到达时震动提醒')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+      .backgroundColor('#f9f9f9')
+      .borderRadius(8)
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor('#ffffff')
+    .borderRadius(8)
   }
 
   /**
