@@ -1,4 +1,4 @@
-import { Action, OpenUrlConfig } from '../../models/Macro';
+import { Action, OpenUrlConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
@@ -19,7 +19,7 @@ export class OpenUrlAction implements IActionExecutor {
     this.context = context;
   }
 
-  async execute(action: Action, executionContext: ExecutionContext): Promise<void> {
+  async execute(action: Action, executionContext: ExecutionContext): Promise<ActionExecutionResult> {
     if (!this.context) {
       throw new Error('UIAbilityContext not initialized');
     }
@@ -27,26 +27,44 @@ export class OpenUrlAction implements IActionExecutor {
     const config = JSON.parse(action.config) as OpenUrlConfig;
     Logger.info('OpenUrlAction', `Opening URL: ${config.url}`);
 
+    const startTime = Date.now();
+
+    // 准备输入数据
+    const inputData: Record<string, any> = {
+      url: config.url,
+      openWith: config.openWith
+    };
+
     try {
       // 解析变量
       const url = await VariableParser.parse(config.url, executionContext);
 
       // 构建 Want 对象
       const want: Want = {
-        action: 'ohos.want.action.VIEW',
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
         uri: url
       };
 
       // 根据打开方式设置
       if (config.openWith === 'browser') {
-        // 使用浏览器打开
-        want.bundleName = 'com.huawei.hmos.browser';  // 鸿蒙浏览器包名（示例）
+        want.entities.push('entity.system.browsable');
       }
-      // 如果是 'app'，则由系统根据 URL scheme 自动选择应用
 
       // 启动
       await this.context.startAbility(want);
       Logger.info('OpenUrlAction', `URL opened successfully: ${url}`);
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: {
+          openedUrl: url,
+          openWith: config.openWith
+        },
+        duration: Date.now() - startTime
+      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

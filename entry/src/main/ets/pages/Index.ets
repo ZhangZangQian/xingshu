@@ -2,6 +2,11 @@ import { Macro } from '../models/Macro';
 import { DatabaseService } from '../services/DatabaseService';
 import { MacroEngine } from '../services/MacroEngine';
 import { MacroCard } from '../components/MacroCard';
+import { SingleSelectDialog } from '../components/SingleSelectDialog';
+import { MultiSelectDialog } from '../components/MultiSelectDialog';
+import { TextInputDialog } from '../components/TextInputDialog';
+import { DialogEventBus } from '../services/actions/UserDialogAction';
+import { UserDialogConfig } from '../models/Macro';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
 import router from '@ohos.router';
@@ -17,8 +22,75 @@ struct Index {
   private databaseService: DatabaseService = DatabaseService.getInstance();
   private macroEngine: MacroEngine = MacroEngine.getInstance();
 
+  // 对话框控制器和配置
+  private singleSelectDialogController: CustomDialogController | null = null;
+  private multiSelectDialogController: CustomDialogController | null = null;
+  private textInputDialogController: CustomDialogController | null = null;
+  private dialogEventBus: DialogEventBus = DialogEventBus.getInstance();
+
   async aboutToAppear() {
     await this.loadMacros();
+    this.registerDialogHandlers();
+  }
+
+  /**
+   * 注册对话框处理器
+   */
+  private registerDialogHandlers() {
+    // 注册单选对话框处理器
+    this.dialogEventBus.registerSingleSelectHandler(async (config: UserDialogConfig) => {
+      return new Promise((resolve) => {
+        this.singleSelectDialogController = new CustomDialogController({
+          builder: SingleSelectDialog({
+            title: config.title,
+            options: config.options || [],
+            onConfirm: (selected: string, index: number) => {
+              resolve({ value: selected, index: index });
+            }
+          }),
+          customStyle: true
+        });
+        this.singleSelectDialogController.open();
+      });
+    });
+
+    // 注册多选对话框处理器
+    this.dialogEventBus.registerMultiSelectHandler(async (config: UserDialogConfig) => {
+      return new Promise((resolve) => {
+        this.multiSelectDialogController = new CustomDialogController({
+          builder: MultiSelectDialog({
+            title: config.title,
+            options: config.options || [],
+            onConfirm: (selected: string[]) => {
+              resolve(selected);
+            }
+          }),
+          customStyle: true
+        });
+        this.multiSelectDialogController.open();
+      });
+    });
+
+    // 注册文本输入对话框处理器
+    this.dialogEventBus.registerTextInputHandler(async (config: UserDialogConfig) => {
+      return new Promise((resolve) => {
+        this.textInputDialogController = new CustomDialogController({
+          builder: TextInputDialog({
+            title: config.title,
+            message: config.message,
+            placeholder: config.placeholder,
+            defaultValue: config.defaultValue,
+            onConfirm: (text: string) => {
+              resolve(text);
+            }
+          }),
+          customStyle: true
+        });
+        this.textInputDialogController.open();
+      });
+    });
+
+    Logger.info('Index', 'Dialog handlers registered');
   }
 
   /**

@@ -494,6 +494,7 @@ struct MacroEditor {
 
   /**
    * 创建快小红流程模板
+   * 参考 docs/快小红宏流程完整解析.md
    */
   private createKuaiXiaoHongTemplate() {
     // 1. 添加手动触发器
@@ -506,22 +507,37 @@ struct MacroEditor {
     };
     this.triggers.push(manualTrigger);
 
-    // 2. 读取剪贴板
-    const clipboardAction: Action = {
+    // 2. 发送通知 - 启动提示
+    const startNotificationAction: Action = {
       id: Date.now() + 1,
+      macroId: this.macroId,
+      type: ActionType.NOTIFICATION,
+      config: JSON.stringify({
+        title: '开始采集',
+        content: '请按提示逐步操作',
+        enableSound: false,
+        enableVibration: false
+      }),
+      orderIndex: 0
+    };
+    this.actions.push(startNotificationAction);
+
+    // 3. 读取剪贴板
+    const clipboardAction: Action = {
+      id: Date.now() + 2,
       macroId: this.macroId,
       type: ActionType.CLIPBOARD_READ,
       config: JSON.stringify({
         operation: 'read',
         saveToVariable: 'clipboard_content'
       }),
-      orderIndex: 0
+      orderIndex: 1
     };
     this.actions.push(clipboardAction);
 
-    // 3. 正则提取 URL
+    // 4. 正则提取 URL
     const textProcessAction: Action = {
-      id: Date.now() + 2,
+      id: Date.now() + 3,
       macroId: this.macroId,
       type: ActionType.TEXT_PROCESS,
       config: JSON.stringify({
@@ -531,79 +547,194 @@ struct MacroEditor {
         groupIndex: 0,
         saveToVariable: 'extracted_url'
       }),
-      orderIndex: 1
+      orderIndex: 2
     };
     this.actions.push(textProcessAction);
 
-    // 4. 用户对话框 - 选择爆款标记
+    // 5. 用户对话框 - 选择爆款标记
     const qualityDialogAction: Action = {
-      id: Date.now() + 3,
-      macroId: this.macroId,
-      type: ActionType.USER_DIALOG,
-      config: JSON.stringify({
-        type: 'single_select',
-        title: '选择爆款标记',
-        message: '请选择内容的质量等级',
-        options: ['普通款', '潜力款', '大爆款'],
-        saveToVariable: 'quality'
-      }),
-      orderIndex: 2
-    };
-    this.actions.push(qualityDialogAction);
-
-    // 5. 用户对话框 - 选择分类标签
-    const labelDialogAction: Action = {
       id: Date.now() + 4,
       macroId: this.macroId,
       type: ActionType.USER_DIALOG,
       config: JSON.stringify({
-        type: 'multi_select',
-        title: '选择分类标签',
-        message: '请选择内容的分类标签（可多选）',
-        options: ['时尚美妆', '旅游出行', '美食探店', '数码科技', '家居生活', '运动健身'],
-        saveToVariable: 'labels'
+        dialogType: 'single_select',
+        title: '🔥 请标记内容火爆程度',
+        message: '请选择内容的质量等级',
+        options: ['⚪ 普通款', '🟡 潜力款', '🔴 大爆款'],
+        saveToVariable: 'quality'
       }),
       orderIndex: 3
     };
+    this.actions.push(qualityDialogAction);
+
+    // 6. 用户对话框 - 选择分类标签（40个选项）
+    const labelDialogAction: Action = {
+      id: Date.now() + 5,
+      macroId: this.macroId,
+      type: ActionType.USER_DIALOG,
+      config: JSON.stringify({
+        dialogType: 'single_select',
+        title: '📑 请选择分类标签',
+        message: '便于分类管理',
+        options: [
+          '💄时尚美妆', '🌍旅游出行', '🍜美食消费', '📚学习教育',
+          '💹商业财经', '💼职场', '💴生米项目', '✨创意灵感',
+          '📝干货分享', '⚙️效率工具', '🎁新奇好物', '🏠家居家装',
+          '👶亲子母婴', '💖情感心理', '🏥医疗健康', '📺影视综艺',
+          '🎵音乐', '📰时政社会', '🎨文学艺术', '🏛️人文历史',
+          '🎭才艺技能', '📱科技数码', '📸摄影', '🎮游戏',
+          '🚗汽车', '🎌二次元', '🏋️运动健身', '🔮星座命理',
+          '📓生活记录', '🎯兴趣爱好', '❓其他', '🤖AI',
+          '🍠小红书', '🎵抖音', '💬微信私域', '📺B站好物',
+          '🎥视频号', '🪽飞书扣子', '▶️YouTube', '🎓在线课程'
+        ],
+        saveToVariable: 'label'
+      }),
+      orderIndex: 4
+    };
     this.actions.push(labelDialogAction);
 
-    // 6. HTTP POST 请求 - 调用 Coze API
+    // 7. 用户对话框 - 对标参考度评分
+    const scoreDialogAction: Action = {
+      id: Date.now() + 6,
+      macroId: this.macroId,
+      type: ActionType.USER_DIALOG,
+      config: JSON.stringify({
+        dialogType: 'single_select',
+        title: '👍 请标记对标参考度',
+        message: '1-5赞，0表示跳过',
+        options: ['5 赞👍👍👍👍👍', '4 赞👍👍👍👍', '3 赞👍👍👍', '2 赞👍👍', '1 赞👍', '0 先不选，跳过'],
+        saveToVariable: 'quality_score'
+      }),
+      orderIndex: 5
+    };
+    this.actions.push(scoreDialogAction);
+
+    // 8. 用户对话框 - 备注说明输入
+    const notesDialogAction: Action = {
+      id: Date.now() + 7,
+      macroId: this.macroId,
+      type: ActionType.USER_DIALOG,
+      config: JSON.stringify({
+        dialogType: 'text_input',
+        title: '📝 请输入收藏备注',
+        message: '（选填）',
+        placeholder: '输入备注内容...',
+        saveToVariable: 'notes'
+      }),
+      orderIndex: 6
+    };
+    this.actions.push(notesDialogAction);
+
+    // 9. 发送通知 - 上传进度
+    const uploadNotificationAction: Action = {
+      id: Date.now() + 8,
+      macroId: this.macroId,
+      type: ActionType.NOTIFICATION,
+      config: JSON.stringify({
+        title: '数据上传中',
+        content: '请耐心等待...',
+        enableSound: false,
+        enableVibration: false
+      }),
+      orderIndex: 7
+    };
+    this.actions.push(uploadNotificationAction);
+
+    // 10. HTTP POST 请求 - 调用 Coze API（笔记采集工作流）
     const headers: HttpHeaders = { 'Content-Type': 'application/json' };
     const httpAction: Action = {
-      id: Date.now() + 5,
+      id: Date.now() + 9,
       macroId: this.macroId,
       type: ActionType.HTTP_REQUEST,
       config: JSON.stringify({
         method: 'POST',
         url: 'https://api.coze.cn/v1/workflow/run',
         headers: headers,
-        body: '{"workflow_id":"7550495126771449906","parameters":{"url":"{extracted_url}","quality":"{quality}","label":"{labels}"}}',
+        body: '{"workflow_id":"7550495126771449906","parameters":{"url":"{extracted_url}","quality":"{quality_score}","read":"{quality}","notes":"{notes}","label":["{label}"],"xhscookie":""}}',
         timeout: 30000,
         saveResponseTo: 'api_response'
       }),
-      orderIndex: 4
+      orderIndex: 8
     };
     this.actions.push(httpAction);
 
-    // 7. 打开飞书多维表格
+    // 11. 文本处理 - 提取响应中的提示语
+    const extractPromptAction: Action = {
+      id: Date.now() + 10,
+      macroId: this.macroId,
+      type: ActionType.TEXT_PROCESS,
+      config: JSON.stringify({
+        operation: 'regex_extract',
+        input: '{api_response}',
+        pattern: '"prompt":"([^"]+)"',
+        groupIndex: 1,
+        saveToVariable: 'result_message'
+      }),
+      orderIndex: 9
+    };
+    this.actions.push(extractPromptAction);
+
+    // 12. 发送通知 - 成功提示
+    const successNotificationAction: Action = {
+      id: Date.now() + 11,
+      macroId: this.macroId,
+      type: ActionType.NOTIFICATION,
+      config: JSON.stringify({
+        title: '✅ 采集成功',
+        content: '{result_message}',
+        enableSound: true,
+        enableVibration: true
+      }),
+      orderIndex: 10
+    };
+    this.actions.push(successNotificationAction);
+
+    // 13. 打开飞书多维表格
     const openUrlAction: Action = {
-      id: Date.now() + 6,
+      id: Date.now() + 12,
       macroId: this.macroId,
       type: ActionType.OPEN_URL,
       config: JSON.stringify({
-        url: 'https://example.feishu.cn/base/xxx',
+        url: 'https://applink.feishu.cn/client/docs/open?url=https://example.feishu.cn/base/xxx',
         openWith: 'browser'
       }),
-      orderIndex: 5
+      orderIndex: 11
     };
     this.actions.push(openUrlAction);
+
+    // 14. 添加必需的全局变量（提示用户配置）
+    this.variables.push({
+      id: Date.now() + 100,
+      scope: VariableScope.MACRO,
+      macroId: this.macroId,
+      name: '飞书多维表格授权码',
+      type: VariableType.STRING,
+      value: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+
+    this.variables.push({
+      id: Date.now() + 101,
+      scope: VariableScope.MACRO,
+      macroId: this.macroId,
+      name: '订单号',
+      type: VariableType.STRING,
+      value: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
 
     // 更新视图模型
     this.updateActionViewModels();
 
-    promptAction.showToast({
-      message: '快小红流程模板已创建！包含 1 个触发器和 6 个动作',
-      duration: 3000
+    promptAction.showDialog({
+      title: '快小红模板创建成功',
+      message: '已创建包含13个动作的完整采集流程。\n\n⚠️ 请在宏编辑页面配置以下必需变量：\n1. 飞书多维表格授权码\n2. 订单号\n\n然后将第10步的 body 中的授权码和订单号替换为 {飞书多维表格授权码} 和 {订单号}。',
+      buttons: [
+        { text: '知道了', color: '#007DFF' }
+      ]
     });
   }
 

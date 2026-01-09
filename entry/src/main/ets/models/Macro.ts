@@ -304,6 +304,42 @@ export interface SystemVariables {
 }
 
 /**
+ * 动作执行日志数据模型
+ */
+export interface ActionExecutionLog {
+  id: number;                      // 主键
+  executionLogId: number;          // 关联的执行日志 ID
+  actionId: number;                 // 关联的动作 ID
+  actionType: ActionType;          // 动作类型
+  actionOrderIndex: number;         // 动作执行顺序
+  inputData?: string;               // 输入数据（JSON 格式）
+  outputData?: string;             // 输出数据（JSON 格式）
+  status: 'success' | 'failed';    // 执行状态
+  errorMessage?: string;           // 错误信息
+  duration: number;                // 执行时长（毫秒）
+  executedAt: number;              // 执行时间戳（毫秒）
+}
+
+/**
+ * 动作执行结果
+ */
+export interface ActionExecutionResult {
+  status: 'success' | 'failed';   // 执行状态
+  inputData?: Record<string, any>; // 输入数据
+  outputData?: Record<string, any>; // 输出数据
+  errorMessage?: string;           // 错误信息
+  duration: number;                // 执行时长（毫秒）
+}
+
+/**
+ * 执行日志扩展信息（包含关联数据）
+ */
+export interface ExecutionLogDetail extends ExecutionLog {
+  macro?: Macro;                    // 关联的宏信息
+  actionLogs?: ActionExecutionLog[]; // 动作执行日志
+}
+
+/**
  * IF_ELSE 分支动作配置
  */
 export interface IfElseConfig {

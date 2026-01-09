@@ -1,4 +1,4 @@
-import { Action, UserDialogConfig } from '../../models/Macro';
+import { Action, UserDialogConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
@@ -21,6 +21,7 @@ import promptAction from '@ohos.promptAction';
  */
 export class DialogEventBus {
   private static instance: DialogEventBus;
+  private singleSelectCallback: ((config: UserDialogConfig) => Promise<{ value: string, index: number }>) | null = null;
   private multiSelectCallback: ((config: UserDialogConfig) => Promise<string[]>) | null = null;
   private textInputCallback: ((config: UserDialogConfig) => Promise<string>) | null = null;
 
@@ -31,6 +32,13 @@ export class DialogEventBus {
       DialogEventBus.instance = new DialogEventBus();
     }
     return DialogEventBus.instance;
+  }
+
+  /**
+   * 注册单选对话框回调（由 UI 层调用）
+   */
+  public registerSingleSelectHandler(handler: (config: UserDialogConfig) => Promise<{ value: string, index: number }>) {
+    this.singleSelectCallback = handler;
   }
 
   /**
@@ -45,6 +53,18 @@ export class DialogEventBus {
    */
   public registerTextInputHandler(handler: (config: UserDialogConfig) => Promise<string>) {
     this.textInputCallback = handler;
+  }
+
+  /**
+   * 显示单选对话框（由服务层调用）
+   */
+  public async showSingleSelect(config: UserDialogConfig): Promise<{ value: string, index: number }> {
+    if (!this.singleSelectCallback) {
+      Logger.warn('DialogEventBus', 'SingleSelect handler not registered, using fallback');
+      // 降级方案：使用系统对话框（但选项过多时无法滚动）
+      return await this.fallbackSingleSelect(config);
+    }
+    return await this.singleSelectCallback(config);
   }
 
   /**
@@ -69,6 +89,24 @@ export class DialogEventBus {
       return config.defaultValue || '';
     }
     return await this.textInputCallback(config);
+  }
+
+  /**
+   * 降级方案：使用系统对话框显示单选（不支持滚动）
+   */
+  private async fallbackSingleSelect(config: UserDialogConfig): Promise<{ value: string, index: number }> {
+    return new Promise((resolve, reject) => {
+      promptAction.showDialog({
+        title: config.title,
+        message: config.message || '请选择一项',
+        buttons: config.options!.map((option) => ({ text: option, color: '#000000' }))
+      }).then((result) => {
+        const selectedOption = config.options![result.index];
+        resolve({ value: selectedOption, index: result.index });
+      }).catch((error: Error) => {
+        reject(error);
+      });
+    });
   }
 
   /**
@@ -126,13 +164,26 @@ export class UserDialogAction implements IActionExecutor {
     this.dialogEventBus = DialogEventBus.getInstance();
   }
 
-  async execute(action: Action, context: ExecutionContext): Promise<void> {
+  async execute(action: Action, context: ExecutionContext): Promise<ActionExecutionResult> {
     const config = JSON.parse(action.config) as UserDialogConfig;
 
     // 解析配置中的变量
     const parsedConfig = await this.parseConfig(config, context);
 
     Logger.info('UserDialogAction', `Showing user dialog: ${parsedConfig.type}`);
+
+    const startTime = Date.now();
+
+    // 准备输入数据
+    const inputData: Record<string, any> = {
+      type: parsedConfig.type,
+      title: parsedConfig.title,
+      message: parsedConfig.message,
+      options: parsedConfig.options,
+      placeholder: parsedConfig.placeholder,
+      defaultValue: parsedConfig.defaultValue,
+      saveToVariable: parsedConfig.saveToVariable
+    };
 
     try {
       let result: Object | undefined = undefined;
@@ -165,6 +216,18 @@ export class UserDialogAction implements IActionExecutor {
       }
 
       Logger.info('UserDialogAction', 'User dialog completed successfully');
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: {
+          type: parsedConfig.type,
+          result: result,
+          savedToVariable: parsedConfig.saveToVariable
+        },
+        duration: Date.now() - startTime
+      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -209,24 +272,20 @@ export class UserDialogAction implements IActionExecutor {
 
   /**
    * 显示单选对话框
+   * 使用 DialogEventBus 通知 UI 层显示 CustomDialog（支持滚动）
    */
   private async showSingleSelectDialog(config: UserDialogConfig): Promise<string> {
     if (!config.options || config.options.length === 0) {
       throw new Error('Options are required for single select dialog');
     }
 
-    return new Promise((resolve, reject) => {
-      promptAction.showDialog({
-        title: config.title,
-        message: config.message || '请选择一项',
-        buttons: config.options.map((option) => ({ text: option, color: '#000000' }))
-      }).then((result) => {
-        const selectedOption = config.options![result.index];
-        resolve(selectedOption);
-      }).catch((error: Error) => {
-        reject(error);
-      });
-    });
+    Logger.info('UserDialogAction', `Showing single-select dialog with ${config.options.length} options`);
+
+    // 通过事件总线请求 UI 层显示单选对话框
+    const result = await this.dialogEventBus.showSingleSelect(config);
+
+    Logger.info('UserDialogAction', `Single-select result: ${result.value} at index ${result.index}`);
+    return result.value;
   }
 
   /**

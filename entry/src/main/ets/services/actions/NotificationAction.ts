@@ -1,4 +1,4 @@
-import { Action, NotificationConfig } from '../../models/Macro';
+import { Action, NotificationConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
@@ -15,9 +15,19 @@ export class NotificationAction implements IActionExecutor {
     this.notificationService = NotificationService.getInstance();
   }
 
-  async execute(action: Action, context: ExecutionContext): Promise<void> {
+  async execute(action: Action, context: ExecutionContext): Promise<ActionExecutionResult> {
     const config = JSON.parse(action.config) as NotificationConfig;
     Logger.info('NotificationAction', `Sending notification: ${config.title}`);
+
+    const startTime = Date.now();
+
+    // 准备输入数据
+    const inputData: Record<string, any> = {
+      title: config.title,
+      content: config.content,
+      enableSound: config.enableSound,
+      enableVibration: config.enableVibration
+    };
 
     try {
       // 解析变量
@@ -35,6 +45,17 @@ export class NotificationAction implements IActionExecutor {
       );
 
       Logger.info('NotificationAction', 'Notification sent successfully');
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: {
+          title: title,
+          content: content
+        },
+        duration: Date.now() - startTime
+      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

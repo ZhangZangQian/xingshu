@@ -1,4 +1,4 @@
-import { Action, SetVariableConfig } from '../../models/Macro';
+import { Action, SetVariableConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
@@ -16,9 +16,18 @@ import { Variable, VariableScope, VariableType, VariableInput } from '../../mode
  * 4. global 和 macro 变量会持久化到数据库
  */
 export class SetVariableAction implements IActionExecutor {
-  async execute(action: Action, context: ExecutionContext): Promise<void> {
+  async execute(action: Action, context: ExecutionContext): Promise<ActionExecutionResult> {
     const config = JSON.parse(action.config) as SetVariableConfig;
     Logger.info('SetVariableAction', `Setting variable: ${config.variableName}, scope: ${config.scope}`);
+
+    const startTime = Date.now();
+
+    // 准备输入数据
+    const inputData: Record<string, any> = {
+      variableName: config.variableName,
+      value: config.value,
+      scope: config.scope
+    };
 
     try {
       // 解析变量值（支持变量引用）
@@ -44,6 +53,18 @@ export class SetVariableAction implements IActionExecutor {
       }
 
       Logger.info('SetVariableAction', `Variable ${config.variableName} set successfully`);
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: {
+          variableName: config.variableName,
+          value: parsedValue,
+          scope: config.scope
+        },
+        duration: Date.now() - startTime
+      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

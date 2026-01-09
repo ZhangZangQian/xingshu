@@ -1,4 +1,4 @@
-import { Action, TextProcessConfig } from '../../models/Macro';
+import { Action, TextProcessConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
@@ -9,9 +9,23 @@ import util from '@ohos.util';
  * 文本处理动作执行器
  */
 export class TextProcessAction implements IActionExecutor {
-  async execute(action: Action, context: ExecutionContext): Promise<void> {
+  async execute(action: Action, context: ExecutionContext): Promise<ActionExecutionResult> {
     const config = JSON.parse(action.config) as TextProcessConfig;
     Logger.info('TextProcessAction', `Text processing operation: ${config.operation}`);
+
+    const startTime = Date.now();
+
+    // 准备输入数据
+    const inputData: Record<string, any> = {
+      operation: config.operation,
+      input: config.input,
+      pattern: config.pattern,
+      groupIndex: config.groupIndex,
+      searchValue: config.searchValue,
+      replaceValue: config.replaceValue,
+      separator: config.separator,
+      saveToVariable: config.saveToVariable
+    };
 
     try {
       // 解析输入文本（支持变量）
@@ -60,6 +74,18 @@ export class TextProcessAction implements IActionExecutor {
       }
 
       Logger.info('TextProcessAction', 'Text processing completed successfully');
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: {
+          input: input,
+          result: result,
+          savedToVariable: config.saveToVariable
+        },
+        duration: Date.now() - startTime
+      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

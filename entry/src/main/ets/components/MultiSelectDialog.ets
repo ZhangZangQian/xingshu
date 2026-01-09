@@ -100,7 +100,11 @@ export struct MultiSelectDialog {
           .backgroundColor('#f0f0f0')
           .fontColor('#333333')
           .onClick(() => {
-            this.selectedIndexes = Array.from({ length: this.options.length }, (_, i) => i);
+            const newIndexes: number[] = [];
+            for (let i = 0; i < this.options.length; i++) {
+              newIndexes.push(i);
+            }
+            this.selectedIndexes = newIndexes;
           })
 
         Button('取消全选')

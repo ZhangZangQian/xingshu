@@ -123,7 +123,8 @@ export class MacroEngine {
         const conditionsPassed = await this.conditionEvaluator.evaluate(conditions, context);
         if (!conditionsPassed) {
           Logger.info('MacroEngine', `Macro ${macroId} conditions not met, skipping execution`);
-          await this.logExecution(macroId, triggerType, 'failed', 'Conditions not met', Date.now() - startTime);
+          const duration = Date.now() - startTime;
+          const executionLogId = await this.logExecution(macroId, triggerType, 'failed', 'Conditions not met', duration);
           return false;
         }
       }
@@ -136,7 +137,13 @@ export class MacroEngine {
         return false;
       }
 
-      // 5. 依次执行动作
+      // 5. 预先创建执行日志并获取 ID
+      const executionLogId = await this.logExecution(macroId, triggerType, 'success', '', 0);
+      if (executionLogId > 0) {
+        this.actionExecutor.setExecutionLogId(executionLogId);
+      }
+
+      // 6. 依次执行动作
       for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
         Logger.info('MacroEngine', `Executing action ${i + 1}/${actions.length}: ${action.type}`);
@@ -147,9 +154,18 @@ export class MacroEngine {
           const errorMessage = error instanceof Error ? error.message : String(error);
           Logger.error('MacroEngine', `Action ${action.type} failed: ${errorMessage}`);
 
-          // 记录部分失败
-          await this.logExecution(macroId, triggerType, 'partial', `Action ${action.type} failed: ${errorMessage}`,
-            Date.now() - startTime);
+          // 清除 executionLogId
+          this.actionExecutor.clearExecutionLogId();
+
+          // 更新执行日志状态为部分失败
+          const duration = Date.now() - startTime;
+          if (executionLogId > 0) {
+            await this.databaseService.updateExecutionLog(executionLogId, {
+              status: 'partial',
+              errorMessage: `Action ${action.type} failed: ${errorMessage}`,
+              duration: duration
+            });
+          }
 
           // 发送错误通知
           await this.notificationService.sendErrorNotification(macro.name, `动作 ${action.type} 执行失败`);
@@ -159,25 +175,40 @@ export class MacroEngine {
         }
       }
 
-      // 6. 记录成功日志
-      await this.logExecution(macroId, triggerType, 'success', '', Date.now() - startTime);
+      // 清除 executionLogId
+      this.actionExecutor.clearExecutionLogId();
 
-      // 7. 可选：发送成功通知（根据用户设置）
+      // 7. 更新执行日志的持续时间
+      const duration = Date.now() - startTime;
+      if (executionLogId > 0) {
+        await this.databaseService.updateExecutionLog(executionLogId, {
+          duration: duration
+        });
+      }
+
+      // 8. 可选：发送成功通知（根据用户设置）
       // await this.notificationService.sendSuccessNotification(macro.name);
 
-      Logger.info('MacroEngine', `Macro ${macroId} executed successfully in ${Date.now() - startTime}ms`);
+      Logger.info('MacroEngine', `Macro ${macroId} executed successfully in ${duration}ms`);
       return true;
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       Logger.error('MacroEngine', `Macro ${macroId} execution failed: ${errorMessage}`);
-      await this.logExecution(macroId, triggerType, 'failed', errorMessage, Date.now() - startTime);
+
+      // 清除 executionLogId
+      this.actionExecutor.clearExecutionLogId();
+
+      // 记录失败日志
+      const duration = Date.now() - startTime;
+      const executionLogId = await this.logExecution(macroId, triggerType, 'failed', errorMessage, duration);
       return false;
     }
   }
 
   /**
    * 记录执行日志
+   * @returns 执行日志 ID
    */
   private async logExecution(
     macroId: number,
@@ -185,11 +216,13 @@ export class MacroEngine {
     status: 'success' | 'failed' | 'partial',
     errorMessage: string,
     duration: number
-  ): Promise<void> {
-    if (!this.databaseService) return;
+  ): Promise<number> {
+    if (!this.databaseService) {
+      return 0;
+    }
 
     try {
-      await this.databaseService.insertExecutionLog({
+      const logId = await this.databaseService.insertExecutionLog({
         macroId: macroId,
         triggerType: triggerType,
         status: status,
@@ -197,8 +230,10 @@ export class MacroEngine {
         executedAt: Date.now(),
         duration: duration
       });
+      return logId;
     } catch (error) {
       Logger.error('MacroEngine', 'Failed to log execution', error as Error);
+      return 0;
     }
   }
 

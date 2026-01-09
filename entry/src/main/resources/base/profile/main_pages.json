@@ -3,6 +3,7 @@
     "pages/Index",
     "pages/MacroEditor",
     "pages/ExecutionLog",
+    "pages/ExecutionLogDetail",
     "pages/GlobalVariables"
   ]
 }

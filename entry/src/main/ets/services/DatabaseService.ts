@@ -1,5 +1,6 @@
 import relationalStore from '@ohos.data.relationalStore';
-import { Macro, Trigger, Action, Condition, ExecutionLog } from '../models/Macro';
+import { Context } from '@kit.AbilityKit';
+import { Macro, Trigger, Action, Condition, ExecutionLog, ActionExecutionLog } from '../models/Macro';
 import {
   Variable,
   VariableInput,
@@ -143,6 +144,28 @@ export class DatabaseService {
       `CREATE INDEX IF NOT EXISTS idx_log_macro_id ON execution_log(macro_id)`,
       `CREATE INDEX IF NOT EXISTS idx_log_executed_at ON execution_log(executed_at DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_log_status ON execution_log(status)`,
+
+      // 动作执行日志表
+      `CREATE TABLE IF NOT EXISTS action_execution_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        execution_log_id INTEGER NOT NULL,
+        action_id INTEGER NOT NULL,
+        action_type TEXT NOT NULL,
+        action_order_index INTEGER NOT NULL,
+        input_data TEXT,
+        output_data TEXT,
+        status TEXT NOT NULL CHECK(status IN ('success', 'failed')),
+        error_message TEXT,
+        duration INTEGER NOT NULL,
+        executed_at INTEGER NOT NULL,
+        FOREIGN KEY (execution_log_id) REFERENCES execution_log(id) ON DELETE CASCADE
+      )`,
+
+      // 创建索引
+      `CREATE INDEX IF NOT EXISTS idx_action_log_execution_log_id ON action_execution_log(execution_log_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_action_log_action_id ON action_execution_log(action_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_action_log_action_type ON action_execution_log(action_type)`,
+      `CREATE INDEX IF NOT EXISTS idx_action_log_executed_at ON action_execution_log(executed_at DESC)`,
 
       // 变量表
       `CREATE TABLE IF NOT EXISTS variable (
@@ -503,6 +526,30 @@ export class DatabaseService {
     }
   }
 
+  /**
+   * 根据ID查询动作
+   */
+  async getActionById(id: number): Promise<Action | null> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('action');
+    predicates.equalTo('id', id);
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      if (resultSet.goToFirstRow()) {
+        const action = this.parseActionFromResultSet(resultSet);
+        resultSet.close();
+        return action;
+      }
+      resultSet.close();
+      return null;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to get action by id ${id}`, error as Error);
+      throw new Error(`查询动作失败: ${(error as Error).message}`);
+    }
+  }
+
   // ==================== 条件 CRUD ====================
 
   /**
@@ -650,6 +697,113 @@ export class DatabaseService {
     }
   }
 
+  // ==================== 动作执行日志 CRUD ====================
+
+  /**
+   * 插入动作执行日志
+   */
+  async insertActionExecutionLog(log: Omit<ActionExecutionLog, 'id'>): Promise<number> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const valueBucket: relationalStore.ValuesBucket = {
+      execution_log_id: log.executionLogId,
+      action_id: log.actionId,
+      action_type: log.actionType,
+      action_order_index: log.actionOrderIndex,
+      input_data: log.inputData ? JSON.stringify(log.inputData) : null,
+      output_data: log.outputData ? JSON.stringify(log.outputData) : null,
+      status: log.status,
+      error_message: log.errorMessage || '',
+      duration: log.duration,
+      executed_at: log.executedAt
+    };
+
+    try {
+      const rowId = await this.store.insert('action_execution_log', valueBucket);
+      return rowId as number;
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to insert action execution log', error as Error);
+      throw new Error(`记录动作日志失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 查询执行日志的所有动作日志
+   */
+  async getActionExecutionLogsByExecutionLogId(executionLogId: number): Promise<ActionExecutionLog[]> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('action_execution_log');
+    predicates.equalTo('execution_log_id', executionLogId);
+    predicates.orderByAsc('action_order_index');
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      const logs: ActionExecutionLog[] = [];
+
+      while (resultSet.goToNextRow()) {
+        logs.push(this.parseActionExecutionLogFromResultSet(resultSet));
+      }
+
+      resultSet.close();
+      return logs;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to get action execution logs for execution ${executionLogId}`, error as Error);
+      throw new Error(`查询动作执行日志失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 清理旧的动作执行日志（保留最近 30 天）
+   */
+  async cleanOldActionLogs(daysToKeep: number = 30): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const cutoffTime = Date.now() - daysToKeep * 24 * 60 * 60 * 1000;
+
+    const predicates = new relationalStore.RdbPredicates('action_execution_log');
+    predicates.lessThan('executed_at', cutoffTime);
+
+    try {
+      const deletedRows = await this.store.delete(predicates);
+      Logger.info('DatabaseService', `Cleaned ${deletedRows} old action execution logs`);
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to clean old action logs', error as Error);
+    }
+  }
+
+  /**
+   * 更新执行日志
+   */
+  async updateExecutionLog(
+    id: number,
+    updates: Partial<Omit<ExecutionLog, 'id' | 'macroId' | 'triggerType' | 'executedAt'>>
+  ): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const valueBucket: relationalStore.ValuesBucket = {};
+    if (updates.status !== undefined) {
+      valueBucket.status = updates.status;
+    }
+    if (updates.errorMessage !== undefined) {
+      valueBucket.error_message = updates.errorMessage;
+    }
+    if (updates.duration !== undefined) {
+      valueBucket.duration = updates.duration;
+    }
+
+    const predicates = new relationalStore.RdbPredicates('execution_log');
+    predicates.equalTo('id', id);
+
+    try {
+      await this.store.update(valueBucket, predicates);
+      Logger.info('DatabaseService', `Updated execution log ${id}`);
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to update execution log ${id}`, error as Error);
+      throw new Error(`更新执行日志失败: ${(error as Error).message}`);
+    }
+  }
+
   // ==================== 辅助方法 ====================
 
   /**
@@ -707,6 +861,30 @@ export class DatabaseService {
   }
 
   /**
+   * 根据ID查询执行日志
+   */
+  async getExecutionLogById(id: number): Promise<ExecutionLog | null> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('execution_log');
+    predicates.equalTo('id', id);
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      if (resultSet.goToFirstRow()) {
+        const log = this.parseExecutionLogFromResultSet(resultSet);
+        resultSet.close();
+        return log;
+      }
+      resultSet.close();
+      return null;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to get execution log by id ${id}`, error as Error);
+      throw new Error(`查询执行日志失败: ${(error as Error).message}`);
+    }
+  }
+
+  /**
    * 从 ResultSet 解析执行日志对象
    */
   private parseExecutionLogFromResultSet(resultSet: relationalStore.ResultSet): ExecutionLog {
@@ -718,6 +896,28 @@ export class DatabaseService {
       errorMessage: resultSet.getString(resultSet.getColumnIndex('error_message')) || undefined,
       executedAt: resultSet.getLong(resultSet.getColumnIndex('executed_at')),
       duration: resultSet.getLong(resultSet.getColumnIndex('duration'))
+    };
+  }
+
+  /**
+   * 从 ResultSet 解析动作执行日志对象
+   */
+  private parseActionExecutionLogFromResultSet(resultSet: relationalStore.ResultSet): ActionExecutionLog {
+    const inputDataString = resultSet.getString(resultSet.getColumnIndex('input_data'));
+    const outputDataString = resultSet.getString(resultSet.getColumnIndex('output_data'));
+
+    return {
+      id: resultSet.getLong(resultSet.getColumnIndex('id')),
+      executionLogId: resultSet.getLong(resultSet.getColumnIndex('execution_log_id')),
+      actionId: resultSet.getLong(resultSet.getColumnIndex('action_id')),
+      actionType: resultSet.getString(resultSet.getColumnIndex('action_type')) as any,
+      actionOrderIndex: resultSet.getLong(resultSet.getColumnIndex('action_order_index')),
+      inputData: inputDataString ? JSON.parse(inputDataString) : undefined,
+      outputData: outputDataString ? JSON.parse(outputDataString) : undefined,
+      status: resultSet.getString(resultSet.getColumnIndex('status')) as any,
+      errorMessage: resultSet.getString(resultSet.getColumnIndex('error_message')) || undefined,
+      duration: resultSet.getLong(resultSet.getColumnIndex('duration')),
+      executedAt: resultSet.getLong(resultSet.getColumnIndex('executed_at'))
     };
   }
 

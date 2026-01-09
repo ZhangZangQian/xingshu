@@ -1,4 +1,4 @@
-import { Action, HttpRequestConfig } from '../../models/Macro';
+import { Action, HttpRequestConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
@@ -15,9 +15,20 @@ export class HttpRequestAction implements IActionExecutor {
     this.httpService = HttpService.getInstance();
   }
 
-  async execute(action: Action, context: ExecutionContext): Promise<void> {
+  async execute(action: Action, context: ExecutionContext): Promise<ActionExecutionResult> {
     const config = JSON.parse(action.config) as HttpRequestConfig;
     Logger.info('HttpRequestAction', `Sending HTTP ${config.method} request to ${config.url}`);
+
+    const startTime = Date.now();
+
+    // 准备输入数据
+    const inputData: Record<string, any> = {
+      method: config.method,
+      url: config.url,
+      headers: config.headers,
+      body: config.body,
+      timeout: config.timeout
+    };
 
     try {
       // 解析变量
@@ -51,6 +62,20 @@ export class HttpRequestAction implements IActionExecutor {
       }
 
       Logger.info('HttpRequestAction', 'HTTP request completed successfully');
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: {
+          url: url,
+          headers: headers,
+          body: body,
+          response: response,
+          savedToVariable: config.saveResponseTo
+        },
+        duration: Date.now() - startTime
+      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

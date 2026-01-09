@@ -1,4 +1,4 @@
-import { Action, ActionType, IfElseConfig, Branch, BranchCondition, ConditionOperator, ActionConfig } from '../../models/Macro';
+import { Action, ActionType, IfElseConfig, Branch, BranchCondition, ConditionOperator, ActionConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import { ConditionEvaluator } from '../ConditionEvaluator';
@@ -56,7 +56,7 @@ export class IfElseAction implements IActionExecutor {
   /**
    * 执行 IF_ELSE 动作
    */
-  async execute(action: Action, context: ExecutionContext): Promise<void> {
+  async execute(action: Action, context: ExecutionContext): Promise<ActionExecutionResult> {
     // 检查嵌套深度
     this.currentDepth++;
     if (this.currentDepth > IfElseAction.MAX_DEPTH) {
@@ -64,15 +64,37 @@ export class IfElseAction implements IActionExecutor {
       throw new Error(`IF_ELSE nesting depth exceeds maximum (${IfElseAction.MAX_DEPTH})`);
     }
 
+    const startTime = Date.now();
+
     try {
       const config = JSON.parse(action.config) as IfElseConfig;
 
       if (!config.branches || config.branches.length === 0) {
         Logger.warn(TAG, 'No branches defined in IF_ELSE action');
-        return;
+        return {
+          status: 'success',
+          inputData: { branches: [] },
+          outputData: { message: 'No branches defined' },
+          duration: Date.now() - startTime
+        };
       }
 
       Logger.info(TAG, `[Depth ${this.currentDepth}] Evaluating ${config.branches.length} branches`);
+
+      // 准备输入数据
+      const inputData: Record<string, any> = {
+        branches: config.branches.map(b => ({
+          name: b.name,
+          conditions: b.conditions,
+          actionCount: b.actions?.length || 0
+        }))
+      };
+
+      const outputData: Record<string, any> = {
+        depth: this.currentDepth,
+        executedBranchName: null as string | null,
+        executedBranchIndex: -1
+      };
 
       // 遍历所有分支
       for (let i = 0; i < config.branches.length; i++) {
@@ -84,8 +106,11 @@ export class IfElseAction implements IActionExecutor {
 
         if (isElseBranch) {
           Logger.info(TAG, `[Depth ${this.currentDepth}] Executing else branch: ${branchName}`);
+          outputData.executedBranchName = branchName;
+          outputData.executedBranchIndex = i;
+          outputData.isElseBranch = true;
           await this.executeBranch(branch, context);
-          return;  // else 分支执行后退出
+          break;  // else 分支执行后退出
         }
 
         // 评估分支条件
@@ -93,15 +118,29 @@ export class IfElseAction implements IActionExecutor {
 
         if (conditionsPassed) {
           Logger.info(TAG, `[Depth ${this.currentDepth}] Branch conditions met: ${branchName}`);
+          outputData.executedBranchName = branchName;
+          outputData.executedBranchIndex = i;
+          outputData.isElseBranch = false;
           await this.executeBranch(branch, context);
-          return;  // 找到匹配分支后退出
+          break;  // 找到匹配分支后退出
         } else {
           Logger.info(TAG, `[Depth ${this.currentDepth}] Branch conditions not met: ${branchName}`);
         }
       }
 
       // 所有分支都不匹配
-      Logger.info(TAG, `[Depth ${this.currentDepth}] No branch conditions matched`);
+      if (outputData.executedBranchIndex === -1) {
+        Logger.info(TAG, `[Depth ${this.currentDepth}] No branch conditions matched`);
+        outputData.message = 'No branch conditions matched';
+      }
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: outputData,
+        duration: Date.now() - startTime
+      };
 
     } finally {
       this.currentDepth--;

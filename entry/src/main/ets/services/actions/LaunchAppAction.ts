@@ -1,4 +1,4 @@
-import { Action, LaunchAppConfig } from '../../models/Macro';
+import { Action, LaunchAppConfig, ActionExecutionResult } from '../../models/Macro';
 import { ExecutionContext } from '../../models/ExecutionContext';
 import { IActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
@@ -19,13 +19,25 @@ export class LaunchAppAction implements IActionExecutor {
     this.context = context;
   }
 
-  async execute(action: Action, executionContext: ExecutionContext): Promise<void> {
+  async execute(action: Action, executionContext: ExecutionContext): Promise<ActionExecutionResult> {
     if (!this.context) {
       throw new Error('UIAbilityContext not initialized');
     }
 
     const config = JSON.parse(action.config) as LaunchAppConfig;
     Logger.info('LaunchAppAction', `Launching app: ${config.bundleName}`);
+
+    const startTime = Date.now();
+
+    // 准备输入数据
+    const inputData: Record<string, any> = {
+      bundleName: config.bundleName,
+      abilityName: config.abilityName,
+      mode: config.mode,
+      action: config.action,
+      uri: config.uri,
+      parameters: config.parameters
+    };
 
     try {
       // 构建 Want 对象
@@ -54,6 +66,17 @@ export class LaunchAppAction implements IActionExecutor {
       // 启动应用
       await this.context.startAbility(want);
       Logger.info('LaunchAppAction', `App ${config.bundleName} launched successfully`);
+
+      // 返回执行结果
+      return {
+        status: 'success',
+        inputData: inputData,
+        outputData: {
+          launchedBundleName: config.bundleName,
+          launchedAbilityName: config.abilityName
+        },
+        duration: Date.now() - startTime
+      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
