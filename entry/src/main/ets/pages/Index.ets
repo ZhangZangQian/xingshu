@@ -33,6 +33,10 @@ struct Index {
     this.registerDialogHandlers();
   }
 
+  onPageShow() {
+    this.loadMacros();
+  }
+
   /**
    * 注册对话框处理器
    */
