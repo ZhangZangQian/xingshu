@@ -11,9 +11,10 @@ import { OpenUrlAction } from '../services/actions/OpenUrlAction';
 import { TextProcessAction } from '../services/actions/TextProcessAction';
 import { UserDialogAction } from '../services/actions/UserDialogAction';
 import { SetVariableAction } from '../services/actions/SetVariableAction';
+import { IfElseAction } from '../services/actions/IfElseAction';
+import { JsonProcessAction } from '../services/actions/JsonProcessAction';
 import { ActionType } from '../models/Macro';
 import { Action } from '@ohos.multimodalInput.touchEvent';
-import { IfElseAction } from '../services/actions/IfElseAction';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want, launchParam) {
@@ -99,7 +100,8 @@ export default class EntryAbility extends UIAbility {
       actionExecutor.registerExecutor(ActionType.TEXT_PROCESS, new TextProcessAction());
       actionExecutor.registerExecutor(ActionType.USER_DIALOG, new UserDialogAction());
       actionExecutor.registerExecutor(ActionType.SET_VARIABLE, new SetVariableAction());
-      actionExecutor.registerExecutor(ActionType.IF_ELSE, new IfElseAction())
+      actionExecutor.registerExecutor(ActionType.IF_ELSE, new IfElseAction());
+      actionExecutor.registerExecutor(ActionType.JSON_PROCESS, new JsonProcessAction());
 
       hilog.info(0x0000, 'EntryAbility', 'App initialized successfully');
     } catch (error) {

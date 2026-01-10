@@ -6,10 +6,17 @@ export enum VariableScope {
 export enum VariableType {
   STRING = 'string',
   NUMBER = 'number',
-  BOOLEAN = 'boolean'
+  BOOLEAN = 'boolean',
+  OBJECT = 'object',
+  ARRAY = 'array'
 }
 
-export type VariableValue = string | number | boolean;
+export type VariableValue =
+  | string
+  | number
+  | boolean
+  | Record<string, any>
+  | any[];
 
 export interface Variable {
   id: number;
@@ -40,9 +47,21 @@ export function isVariableValueTypeMatch(type: VariableType, value: unknown): va
       return typeof value === 'number' && Number.isFinite(value);
     case VariableType.BOOLEAN:
       return typeof value === 'boolean';
+    case VariableType.OBJECT:
+      return isJSONObject(value);
+    case VariableType.ARRAY:
+      return isJSONArray(value);
     default:
       return false;
   }
+}
+
+export function isJSONObject(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isJSONArray(value: unknown): value is any[] {
+  return Array.isArray(value);
 }
 
 export function ensureVariableValueType(type: VariableType, value: unknown): asserts value is VariableValue {
@@ -63,6 +82,23 @@ export function deserializeVariableValue(type: VariableType, value: string): Var
     throw new Error('变量值 JSON 解析失败');
   }
 
-  ensureVariableValueType(type, parsed);
-  return parsed;
+  switch (type) {
+    case VariableType.STRING:
+      if (typeof parsed !== 'string') throw new Error('Expected string');
+      return parsed;
+    case VariableType.NUMBER:
+      if (typeof parsed !== 'number') throw new Error('Expected number');
+      return parsed;
+    case VariableType.BOOLEAN:
+      if (typeof parsed !== 'boolean') throw new Error('Expected boolean');
+      return parsed;
+    case VariableType.OBJECT:
+      if (!isJSONObject(parsed)) throw new Error('Expected object');
+      return parsed;
+    case VariableType.ARRAY:
+      if (!isJSONArray(parsed)) throw new Error('Expected array');
+      return parsed;
+    default:
+      throw new Error(`Unknown type: ${type}`);
+  }
 }

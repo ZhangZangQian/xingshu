@@ -1059,13 +1059,73 @@ export struct ActionConfigEditor {
 
       // Body（仅 POST/PUT 显示）
       if (this.configData['method'] === 'POST' || this.configData['method'] === 'PUT') {
+        // Body 类型选择
+        Column({ space: 8 }) {
+          Text('请求体类型')
+            .fontSize(14)
+            .fontColor('#666666')
+
+          Row({ space: 8 }) {
+            Button('JSON')
+              .fontSize(12)
+              .height(32)
+              .flexGrow(1)
+              .backgroundColor((this.configData['bodyType'] || 'json') === 'json' ? '#007DFF' : '#f0f0f0')
+              .fontColor((this.configData['bodyType'] || 'json') === 'json' ? '#ffffff' : '#333333')
+              .onClick(() => {
+                this.updateConfigData('bodyType', 'json');
+                // 自动设置 Content-Type
+                const headers = this.configData['headers'] as Record<string, string> || {};
+                if (!headers['Content-Type']) {
+                  headers['Content-Type'] = 'application/json';
+                  this.updateConfigData('headers', headers);
+                }
+              })
+
+            Button('Form')
+              .fontSize(12)
+              .height(32)
+              .flexGrow(1)
+              .backgroundColor(this.configData['bodyType'] === 'form' ? '#007DFF' : '#f0f0f0')
+              .fontColor(this.configData['bodyType'] === 'form' ? '#ffffff' : '#333333')
+              .onClick(() => {
+                this.updateConfigData('bodyType', 'form');
+                // 自动设置 Content-Type
+                const headers = this.configData['headers'] as Record<string, string> || {};
+                if (!headers['Content-Type']) {
+                  headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                  this.updateConfigData('headers', headers);
+                }
+              })
+
+            Button('Text')
+              .fontSize(12)
+              .height(32)
+              .flexGrow(1)
+              .backgroundColor(this.configData['bodyType'] === 'text' ? '#007DFF' : '#f0f0f0')
+              .fontColor(this.configData['bodyType'] === 'text' ? '#ffffff' : '#333333')
+              .onClick(() => {
+                this.updateConfigData('bodyType', 'text');
+              })
+          }
+
+          Text('默认为 JSON 格式，自动设置 Content-Type')
+            .fontSize(11)
+            .fontColor('#999999')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+
+        // Body 输入框
         Column({ space: 8 }) {
           Text('请求体（Body）')
             .fontSize(14)
             .fontColor('#666666')
 
           TextArea({
-            placeholder: '输入 JSON 或其他格式的请求体',
+            placeholder: (this.configData['bodyType'] || 'json') === 'json' ? '输入 JSON 格式，例如：{"key": "value"}' :
+              this.configData['bodyType'] === 'form' ? '输入表单格式，例如：key1=value1&key2=value2' :
+              '输入纯文本',
             text: this.configData['body'] as string
           })
             .fontSize(14)

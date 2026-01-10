@@ -39,6 +39,15 @@ export class ActionConfigSummaryGenerator {
         case ActionType.LAUNCH_APP:
           return this.generateLaunchAppSummary(config);
 
+        case ActionType.SET_VARIABLE:
+          return this.generateSetVariableSummary(config);
+
+        case ActionType.IF_ELSE:
+          return this.generateIfElseSummary(config);
+
+        case ActionType.JSON_PROCESS:
+          return this.generateJsonProcessSummary(config);
+
         default:
           return '未知动作类型';
       }
@@ -159,6 +168,56 @@ export class ActionConfigSummaryGenerator {
   }
 
   /**
+   * 生成设置变量摘要
+   */
+  private static generateSetVariableSummary(config: any): string {
+    const variableName = config.variableName || '(未设置)';
+    const value = config.value !== undefined ? this.truncateText(config.value, 40) : '(未设置)';
+    const scope = config.scope === 'global' ? '[全局]' : '[运行时]';
+    return `${variableName} = ${value} ${scope}`;
+  }
+
+  /**
+   * 生成条件分支摘要
+   */
+  private static generateIfElseSummary(config: any): string {
+    const branches = config.branches || [];
+    const branchCount = branches.length;
+    if (branchCount === 0) {
+      return '条件分支 (无分支)';
+    }
+    return `条件分支 (${branchCount} 个分支)`;
+  }
+
+  /**
+   * 生成 JSON 处理摘要
+   */
+  private static generateJsonProcessSummary(config: any): string {
+    const operationNames: Record<string, string> = {
+      'json_query': 'JSON 查询',
+      'json_filter': 'JSON 过滤',
+      'json_map': 'JSON 映射',
+      'json_merge': 'JSON 合并',
+      'array_length': '数组长度',
+      'array_get': '数组获取',
+      'array_set': '数组设置',
+      'json_encode': 'JSON 编码',
+      'json_decode': 'JSON 解码'
+    };
+
+    const operation = operationNames[config.operation] || config.operation;
+    const input = config.input ? this.truncateText(config.input, 30) : '(未设置)';
+
+    let details = '';
+    if (config.operation === 'json_query') {
+      const path = config.queryPath ? this.truncateText(config.queryPath, 25) : '(未设置)';
+      details = `\n路径: ${path}`;
+    }
+
+    return `${operation}\n输入: ${input}${details}`;
+  }
+
+  /**
    * 截断文本
    */
   private static truncateText(text: string, maxLength: number): string {
@@ -216,6 +275,12 @@ export class ActionConfigSummaryGenerator {
           return config.saveResponseTo || null;
 
         case ActionType.USER_DIALOG:
+          return config.saveToVariable || null;
+
+        case ActionType.SET_VARIABLE:
+          return config.variableName || null;
+
+        case ActionType.JSON_PROCESS:
           return config.saveToVariable || null;
 
         default:

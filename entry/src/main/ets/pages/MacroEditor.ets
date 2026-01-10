@@ -630,7 +630,7 @@ struct MacroEditor {
     };
     this.actions.push(uploadNotificationAction);
 
-    // 11. HTTP POST 请求 - 调用 Coze API（笔记采集工作流）
+     // 11. HTTP POST 请求 - 调用 Coze API（笔记采集工作流）
     const headers: HttpHeaders = { 'Content-Type': 'application/json' };
     const httpAction: Action = {
       id: Date.now() + 11,
@@ -641,37 +641,40 @@ struct MacroEditor {
         url: 'https://api.coze.cn/v1/workflow/run',
         headers: headers,
         body: '{"workflow_id":"7550495126771449906","parameters":{"url":"{extracted_url}","quality":"{quality_score}","read":"{quality}","notes":"{notes}","label":["{label}"],"xhscookie":"{飞书多维表格授权码}","order_id":"{订单号}"}}',
+        bodyType: 'json',
         timeout: 30000,
-        saveResponseTo: 'api_response'
+        parseResponse: true,
+        saveResponseTo: 'api_response',
+        saveParsedResponse: 'api_response_json',
+        saveStatusCodeTo: 'api_status'
       }),
       orderIndex: 10
     };
     this.actions.push(httpAction);
 
-    // 12. 文本处理 - 提取响应中的提示语
+    // 12. JSON 处理 - 查询响应中的提示语（使用 JSONPath）
     const extractPromptAction: Action = {
       id: Date.now() + 12,
       macroId: this.macroId,
-      type: ActionType.TEXT_PROCESS,
+      type: ActionType.JSON_PROCESS,
       config: JSON.stringify({
-        operation: 'regex_extract',
-        input: '{api_response}',
-        pattern: '"prompt":"([^"]+)"',
-        groupIndex: 1,
+        operation: 'json_query',
+        input: '{api_response_json}',
+        queryPath: 'data.message',
         saveToVariable: 'result_message'
       }),
       orderIndex: 11
     };
     this.actions.push(extractPromptAction);
 
-    // 13. 发送通知 - 成功提示
+    // 13. 发送通知 - 成功提示（显示状态码）
     const successNotificationAction: Action = {
       id: Date.now() + 13,
       macroId: this.macroId,
       type: ActionType.NOTIFICATION,
       config: JSON.stringify({
         title: '✅ 采集成功',
-        content: '{result_message}',
+        content: '{result_message}\n状态码: {api_status}',
         enableSound: true,
         enableVibration: true
       }),
@@ -679,16 +682,31 @@ struct MacroEditor {
     };
     this.actions.push(successNotificationAction);
 
-    // 14. 打开飞书多维表格
-    const openUrlAction: Action = {
+    // 14. JSON 处理 - 查询更多数据（可选，展示 JSONPath 能力）
+    const queryMoreDataAction: Action = {
       id: Date.now() + 14,
+      macroId: this.macroId,
+      type: ActionType.JSON_PROCESS,
+      config: JSON.stringify({
+        operation: 'json_query',
+        input: '{api_response_json}',
+        queryPath: 'data',
+        saveToVariable: 'api_data'
+      }),
+      orderIndex: 13
+    };
+    this.actions.push(queryMoreDataAction);
+
+    // 15. 打开飞书多维表格
+    const openUrlAction: Action = {
+      id: Date.now() + 15,
       macroId: this.macroId,
       type: ActionType.OPEN_URL,
       config: JSON.stringify({
         url: 'https://applink.feishu.cn/client/docs/open?url=https://example.feishu.cn/base/xxx',
         openWith: 'browser'
       }),
-      orderIndex: 13
+      orderIndex: 14
     };
     this.actions.push(openUrlAction);
 
@@ -697,7 +715,7 @@ struct MacroEditor {
 
     promptAction.showDialog({
       title: '快小红模板创建成功',
-      message: '已创建包含15个动作的完整采集流程。\n\n流程包含：\n1. 设置变量（飞书授权码）\n2. 设置变量（订单号）\n3-15. 采集、选择、上传流程\n\n⚠️ 请编辑前2个"设置变量"动作，填入实际的飞书授权码和订单号。',
+      message: '已创建包含15个动作的完整采集流程。\n\n流程包含：\n1. 设置变量（飞书授权码）\n2. 设置变量（订单号）\n3-15. 采集、选择、上传流程\n\n✨ JSON 功能增强：\n- HTTP 响应自动解析为 JSON 对象\n- 使用 JSONPath 提取 API 返回数据\n- 可访问嵌套字段：\n  • {api_response_json.data.message} - 提取消息\n  • {api_response_json.data} - 获取完整数据对象\n  • {api_status} - 获取 HTTP 状态码\n\n⚠️ 请编辑前2个"设置变量"动作，填入实际的飞书授权码和订单号。',
       buttons: [
         { text: '知道了', color: '#007DFF' }
       ]
@@ -866,6 +884,8 @@ struct MacroEditor {
         { text: 'HTTP 请求', color: '#000000' },
         { text: '打开 URL', color: '#000000' },
         { text: '文本处理', color: '#000000' },
+        { text: 'JSON 处理', color: '#000000' },
+        { text: '用户对话框', color: '#000000' },
         { text: '设置变量', color: '#000000' },
         { text: '条件分支', color: '#000000' }
       ]
@@ -893,9 +913,15 @@ struct MacroEditor {
           this.addTextProcessAction();
           break;
         case 7:
-          this.addSetVariableAction();
+          this.addJsonProcessAction();
           break;
         case 8:
+          this.addUserDialogAction();
+          break;
+        case 9:
+          this.addSetVariableAction();
+          break;
+        case 10:
           this.addIfElseAction();
           break;
       }
@@ -919,8 +945,10 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: '启动应用动作已添加' });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -940,8 +968,10 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: '发送通知动作已添加' });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -970,8 +1000,10 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: `读取剪贴板动作已添加，保存到变量 ${recommendedName}` });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -989,8 +1021,10 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: '写入剪贴板动作已添加' });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -1018,14 +1052,17 @@ struct MacroEditor {
         url: 'https://example.com/api',
         headers: headers,
         body: '{}',
+        bodyType: 'json',
         timeout: 30000,
         saveResponseTo: recommendedName
       }),
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: `HTTP 请求动作已添加，保存到变量 ${recommendedName}` });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -1043,8 +1080,10 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: '打开 URL 动作已添加' });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -1082,8 +1121,34 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: `文本处理动作已添加，保存到变量 ${recommendedName}` });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
+  }
+
+  /**
+   * 添加用户对话框动作
+   */
+  private addUserDialogAction() {
+    const action: Action = {
+      id: Date.now(),
+      macroId: this.macroId,
+      type: ActionType.USER_DIALOG,
+      config: JSON.stringify({
+        type: 'text_input',
+        title: '请输入内容',
+        message: '描述信息',
+        placeholder: '在此输入...',
+        saveToVariable: 'user_input'
+      }),
+      orderIndex: this.actions.length
+    };
+    this.actions.push(action);
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -1102,8 +1167,10 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: '设置变量动作已添加' });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -1183,8 +1250,33 @@ struct MacroEditor {
       orderIndex: this.actions.length
     };
     this.actions.push(action);
-    this.updateActionViewModels(); // 更新视图模型
-    promptAction.showToast({ message: '条件分支动作已添加，请在配置面板编辑' });
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
+  }
+
+  /**
+   * 添加 JSON 处理动作
+   */
+  private addJsonProcessAction() {
+    const action: Action = {
+      id: Date.now(),
+      macroId: this.macroId,
+      type: ActionType.JSON_PROCESS,
+      config: JSON.stringify({
+        operation: 'json_query',
+        input: '{api_response}',
+        queryPath: 'data.message',
+        saveToVariable: 'extracted_field'
+      }),
+      orderIndex: this.actions.length
+    };
+    this.actions.push(action);
+    this.updateActionViewModels();
+    setTimeout(() => {
+      this.handleEditAction(this.actions.length - 1);
+    }, 10);
   }
 
   /**
@@ -1301,7 +1393,9 @@ struct MacroEditor {
       'text_process': '文本处理',
       'launch_app': '启动应用',
       'user_dialog': '用户对话框',
-      'set_variable': '设置变量'
+      'set_variable': '设置变量',
+      'if_else': '条件分支',
+      'json_process': 'JSON 处理'
     };
     return actionNames[action.type] || action.type;
   }

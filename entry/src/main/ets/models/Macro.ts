@@ -109,7 +109,8 @@ export enum ActionType {
   TEXT_PROCESS = 'text_process',           // 文本处理
   USER_DIALOG = 'user_dialog',             // 用户交互对话框
   SET_VARIABLE = 'set_variable',           // 设置变量
-  IF_ELSE = 'if_else'
+  IF_ELSE = 'if_else',
+  JSON_PROCESS = 'json_process'            // JSON 处理（新增）
 }
 
 /**
@@ -125,7 +126,7 @@ export interface Action {
   // 运行时解析的配置对象
   parsedConfig?: LaunchAppConfig | NotificationConfig | HttpRequestConfig |
                  ClipboardConfig | OpenUrlConfig | TextProcessConfig | UserDialogConfig |
-                 SetVariableConfig | IfElseConfig;
+                 SetVariableConfig | IfElseConfig | JsonProcessConfig;
 }
 
 /**
@@ -164,11 +165,17 @@ export interface HttpHeaders {
  */
 export interface HttpRequestConfig {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  url: string;                     // 请求 URL
-  headers?: HttpHeaders;           // 请求头
-  body?: string;                   // 请求体（JSON 字符串）
-  timeout?: number;                // 超时时间（毫秒，默认 30000）
-  saveResponseTo?: string;         // 保存响应到变量名
+  url: string;
+  headers?: HttpHeaders;
+  body?: string;
+  bodyType?: 'json' | 'form' | 'text' | 'raw';
+  timeout?: number;
+
+  // 新增：JSON 响应解析选项
+  parseResponse?: boolean;
+  saveResponseTo?: string;
+  saveParsedResponse?: string;
+  saveStatusCodeTo?: string;
 }
 
 /**
@@ -233,9 +240,45 @@ export interface UserDialogConfig {
  * 设置变量动作配置
  */
 export interface SetVariableConfig {
-  variableName: string;            // 变量名
-  value: string;                   // 变量值（支持变量引用，如 {clipboard}）
-  scope: 'runtime' | 'global';     // 变量作用域
+  variableName: string;
+  value: string;
+  scope: 'runtime' | 'global';
+
+  // 新增：类型选项
+  type?: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'auto';
+
+  // 新增：是否解析 JSON
+  parseAsJSON?: boolean;
+}
+
+/**
+ * JSON 处理动作配置（新增）
+ */
+export interface JsonProcessConfig {
+  operation: 'json_query' | 'json_filter' | 'json_map' | 'json_merge' |
+              'array_length' | 'array_get' | 'array_set' | 'json_encode' | 'json_decode';
+
+  // 所有操作通用
+  input: string;
+  saveToVariable?: string;
+
+  // json_query
+  queryPath?: string;
+
+  // json_filter
+  filterCondition?: string;
+
+  // json_map
+  mapField?: string;
+
+  // json_merge
+  mergeSource?: string;
+
+  // array_get / array_set
+  arrayIndex?: number;
+
+  // array_set
+  newValue?: string;
 }
 
 /**
@@ -372,5 +415,5 @@ export interface ActionConfig {
   type: ActionType;
   config: LaunchAppConfig | NotificationConfig | HttpRequestConfig |
   ClipboardConfig | OpenUrlConfig | TextProcessConfig | UserDialogConfig |
-  SetVariableConfig | IfElseConfig;  // 支持嵌套
+  SetVariableConfig | IfElseConfig | JsonProcessConfig;  // 支持嵌套
 }

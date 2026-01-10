@@ -96,10 +96,27 @@ export class DatabaseService {
 
       await this.store.insert('action', testAction);
 
+      // 尝试插入一个测试记录，检查是否包含新的变量类型约束
+      const testVariable: relationalStore.ValuesBucket = {
+        scope: 'global',
+        macro_id: null,
+        name: '__test__',
+        type: 'object',
+        value: '{}',
+        created_at: Date.now(),
+        updated_at: Date.now()
+      };
+
+      await this.store.insert('variable', testVariable);
+
       // 如果插入成功，说明约束已包含新类型，删除测试记录
       const predicates = new relationalStore.RdbPredicates('action');
       predicates.equalTo('macro_id', -1);
       await this.store.delete(predicates);
+
+      const variablePredicates = new relationalStore.RdbPredicates('variable');
+      variablePredicates.equalTo('name', '__test__');
+      await this.store.delete(variablePredicates);
 
       return false;
     } catch (error) {
@@ -224,7 +241,7 @@ export class DatabaseService {
         scope TEXT NOT NULL CHECK(scope IN ('global', 'macro')),
         macro_id INTEGER,
         name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('string', 'number', 'boolean')),
+        type TEXT NOT NULL CHECK(type IN ('string', 'number', 'boolean', 'object', 'array')),
         value TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,

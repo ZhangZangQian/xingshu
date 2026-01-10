@@ -1,5 +1,6 @@
 import { ExecutionLog, ActionExecutionLog, Action } from '../models/Macro';
 import { DatabaseService } from '../services/DatabaseService';
+import { ClipboardService } from '../services/ClipboardService';
 import { ActionTypes } from '../constants/ActionTypes';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
@@ -18,6 +19,7 @@ struct ExecutionLogDetailPage {
   @State loading: boolean = true;
   @State showDetails: Map<number, boolean> = new Map();
   private databaseService: DatabaseService = DatabaseService.getInstance();
+  private clipboardService: ClipboardService = ClipboardService.getInstance();
 
   async aboutToAppear() {
     const params = router.getParams() as Record<string, Object>;
@@ -200,11 +202,27 @@ struct ExecutionLogDetailPage {
   }
 
   /**
-   * 检查是否显示详情
-   */
+    * 检查是否显示详情
+    */
   private shouldShowDetail(logId: number): boolean {
     return this.showDetails.get(logId) || false;
   }
+
+  /**
+    * 复制数据到剪贴板
+    */
+  private async copyData(data: string, dataType: string): Promise<void> {
+    try {
+      await this.clipboardService.writeText(data);
+      promptAction.showToast({ message: `${dataType} 已复制到剪贴板` });
+      Logger.info('ExecutionLogDetail', `Copied ${dataType}: ${data.substring(0, 50)}...`);
+    } catch (error) {
+      const errorMsg = (error as Error).message || 'Unknown error';
+      Logger.error('ExecutionLogDetail', `Failed to copy ${dataType}: ${errorMsg}`);
+      promptAction.showToast({ message: `复制失败: ${errorMsg}` });
+    }
+  }
+
 
   build() {
     Column() {
@@ -497,12 +515,25 @@ struct ExecutionLogDetailPage {
                     // 详细信息（可展开）
                     if (this.shouldShowDetail(actionLog.id)) {
                       Column({ space: 12 }) {
-                        // 输入数据
+                         // 输入数据
                         Column({ space: 6 }) {
-                          Text('输入数据')
-                            .fontSize(13)
-                            .fontColor('#666666')
-                            .fontWeight(FontWeight.Medium)
+                          Row() {
+                            Text('输入数据')
+                              .fontSize(13)
+                              .fontColor('#666666')
+                              .fontWeight(FontWeight.Medium)
+                              .layoutWeight(1)
+
+                            Button('复制')
+                              .fontSize(11)
+                              .fontColor('#007DFF')
+                              .backgroundColor(Color.Transparent)
+                              .height(28)
+                              .onClick(() => {
+                                this.copyData(this.formatJsonData(actionLog.inputData), '输入数据');
+                              })
+                          }
+                          .width('100%')
 
                           Text(this.formatJsonData(actionLog.inputData))
                             .fontSize(12)
@@ -517,13 +548,26 @@ struct ExecutionLogDetailPage {
                         .width('100%')
                         .alignItems(HorizontalAlign.Start)
 
-                        // 输出数据
+                         // 输出数据
                         if (actionLog.outputData) {
                           Column({ space: 6 }) {
-                            Text('输出数据')
-                              .fontSize(13)
-                              .fontColor('#666666')
-                              .fontWeight(FontWeight.Medium)
+                            Row() {
+                              Text('输出数据')
+                                .fontSize(13)
+                                .fontColor('#666666')
+                                .fontWeight(FontWeight.Medium)
+                                .layoutWeight(1)
+
+                              Button('复制')
+                                .fontSize(11)
+                                .fontColor('#007DFF')
+                                .backgroundColor(Color.Transparent)
+                                .height(28)
+                                .onClick(() => {
+                                  this.copyData(this.formatJsonData(actionLog.outputData), '输出数据');
+                                })
+                            }
+                            .width('100%')
 
                             Text(this.formatJsonData(actionLog.outputData))
                               .fontSize(12)
