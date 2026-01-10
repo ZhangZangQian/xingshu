@@ -62,14 +62,14 @@
           "when": "always"
         }
       },
-      {
-        "name": "ohos.permission.NOTIFICATION_CONTROLLER",
-        "reason": "$string:permission_notification_reason",
-        "usedScene": {
-          "abilities": ["EntryAbility"],
-          "when": "always"
-        }
-      },
+//      {
+//        "name": "ohos.permission.NOTIFICATION_CONTROLLER",
+//        "reason": "$string:permission_notification_reason",
+//        "usedScene": {
+//          "abilities": ["EntryAbility"],
+//          "when": "always"
+//        }
+//      },
       {
         "name": "ohos.permission.READ_PASTEBOARD",
         "reason": "$string:permission_pasteboard_reason",

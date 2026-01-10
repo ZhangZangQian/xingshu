@@ -29,16 +29,6 @@ export class LaunchAppAction implements IActionExecutor {
 
     const startTime = Date.now();
 
-    // 准备输入数据
-    const inputData: Record<string, any> = {
-      bundleName: config.bundleName,
-      abilityName: config.abilityName,
-      mode: config.mode,
-      action: config.action,
-      uri: config.uri,
-      parameters: config.parameters
-    };
-
     try {
       // 构建 Want 对象
       const want: Want = {
@@ -48,13 +38,15 @@ export class LaunchAppAction implements IActionExecutor {
       };
 
       // 根据启动模式设置
+      let parsedUri: string | undefined = undefined;
       if (config.mode === 'implicit') {
         // 隐式启动
         if (config.action) {
           want.action = config.action;
         }
         if (config.uri) {
-          want.uri = await VariableParser.parse(config.uri, executionContext);
+          parsedUri = await VariableParser.parse(config.uri, executionContext);
+          want.uri = parsedUri;
         }
       } else {
         // 显式启动（需要 abilityName）
@@ -67,10 +59,17 @@ export class LaunchAppAction implements IActionExecutor {
       await this.context.startAbility(want);
       Logger.info('LaunchAppAction', `App ${config.bundleName} launched successfully`);
 
-      // 返回执行结果
+      // 返回执行结果（使用解析后的值作为 inputData）
       return {
         status: 'success',
-        inputData: inputData,
+        inputData: {
+          bundleName: config.bundleName,
+          abilityName: config.abilityName,
+          mode: config.mode,
+          action: config.action,
+          uri: parsedUri,
+          parameters: config.parameters
+        },
         outputData: {
           launchedBundleName: config.bundleName,
           launchedAbilityName: config.abilityName

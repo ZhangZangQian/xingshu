@@ -1,6 +1,8 @@
+import { pasteboard, BusinessError } from '@kit.BasicServicesKit';
+
 /**
  * 文本输入对话框组件
- * 用于用户输入文本内容
+ * 用于用户输入文本内容，支持粘贴
  */
 @CustomDialog
 export struct TextInputDialog {
@@ -45,12 +47,31 @@ export struct TextInputDialog {
           this.inputText = value;
         })
 
-      // 字符数统计
-      Text(`${this.inputText.length} 字符`)
-        .fontSize(12)
-        .fontColor('#999999')
-        .width('100%')
-        .textAlign(TextAlign.End)
+      // 粘贴按钮和字符数统计
+      Row() {
+        // 粘贴按钮
+        PasteButton()
+          .padding({ top: 12, bottom: 12, left: 24, right: 24 })
+          .onClick((event: ClickEvent, result: PasteButtonOnClickResult) => {
+            if (PasteButtonOnClickResult.SUCCESS === result) {
+              pasteboard.getSystemPasteboard().getData((err: BusinessError, pasteData: pasteboard.PasteData) => {
+                if (err) {
+                  console.error(`Failed to get paste data. Code is ${err.code}, message is ${err.message}`);
+                  return;
+                }
+                this.inputText = pasteData.getPrimaryText() || '';
+              });
+            }
+          })
+
+        Blank()
+
+        // 字符数统计
+        Text(`${this.inputText.length} 字符`)
+          .fontSize(12)
+          .fontColor('#999999')
+      }
+      .width('100%')
 
       // 按钮组
       Row({ space: 12 }) {

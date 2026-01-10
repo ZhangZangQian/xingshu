@@ -22,13 +22,6 @@ export class SetVariableAction implements IActionExecutor {
 
     const startTime = Date.now();
 
-    // 准备输入数据
-    const inputData: Record<string, any> = {
-      variableName: config.variableName,
-      value: config.value,
-      scope: config.scope
-    };
-
     try {
       // 解析变量值（支持变量引用）
       const parsedValue = await VariableParser.parse(config.value, context);
@@ -50,10 +43,14 @@ export class SetVariableAction implements IActionExecutor {
 
       Logger.info('SetVariableAction', `Variable ${config.variableName} set successfully`);
 
-      // 返回执行结果
+      // 返回执行结果（使用解析后的值作为 inputData）
       return {
         status: 'success',
-        inputData: inputData,
+        inputData: {
+          variableName: config.variableName,
+          value: parsedValue,
+          scope: config.scope
+        },
         outputData: {
           variableName: config.variableName,
           value: parsedValue,

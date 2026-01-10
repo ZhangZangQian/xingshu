@@ -21,23 +21,19 @@ export class ClipboardAction implements IActionExecutor {
 
     const startTime = Date.now();
 
-    // 准备输入数据
-    const inputData: Record<string, any> = {
-      operation: config.operation,
-      content: config.content,
-      saveToVariable: config.saveToVariable
-    };
-
     try {
       const outputData: Record<string, any> = {
         operation: config.operation
       };
+
+      let parsedContent: string | undefined = undefined;
 
       if (config.operation === 'read') {
         // 读取剪贴板
         const content = await this.clipboardService.readText();
         Logger.info('ClipboardAction', `Read ${content.length} characters from clipboard`);
 
+        parsedContent = content;
         outputData.content = content;
         outputData.contentLength = content.length;
 
@@ -45,7 +41,7 @@ export class ClipboardAction implements IActionExecutor {
         if (config.saveToVariable) {
           context.setVariable(config.saveToVariable, content);
           outputData.savedToVariable = config.saveToVariable;
-          Logger.info('ClipboardAction', `Clipboard content saved to variable: ${config.saveToVariable}`);
+          Logger.info('ClipboardAction', `Clipboard content saved to variable: ${config.saveToVariable}, content length: ${content.length}, content: ${content.substring(0, 50)}`);
         }
 
       } else if (config.operation === 'write') {
@@ -54,12 +50,12 @@ export class ClipboardAction implements IActionExecutor {
           throw new Error('Content is required for clipboard write operation');
         }
 
-        const content = await VariableParser.parse(config.content, context);
-        await this.clipboardService.writeText(content);
-        Logger.info('ClipboardAction', `Wrote ${content.length} characters to clipboard`);
+        parsedContent = await VariableParser.parse(config.content, context);
+        await this.clipboardService.writeText(parsedContent);
+        Logger.info('ClipboardAction', `Wrote ${parsedContent.length} characters to clipboard`);
 
-        outputData.writtenContent = content;
-        outputData.writtenLength = content.length;
+        outputData.writtenContent = parsedContent;
+        outputData.writtenLength = parsedContent.length;
 
       } else {
         throw new Error(`Unknown clipboard operation: ${config.operation}`);
@@ -67,10 +63,14 @@ export class ClipboardAction implements IActionExecutor {
 
       Logger.info('ClipboardAction', 'Clipboard operation completed successfully');
 
-      // 返回执行结果
+      // 返回执行结果（使用解析后的值作为 inputData）
       return {
         status: 'success',
-        inputData: inputData,
+        inputData: {
+          operation: config.operation,
+          content: parsedContent || config.content,
+          saveToVariable: config.saveToVariable
+        },
         outputData: outputData,
         duration: Date.now() - startTime
       };

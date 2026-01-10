@@ -21,19 +21,31 @@ export class HttpRequestAction implements IActionExecutor {
 
     const startTime = Date.now();
 
-    // 准备输入数据
-    const inputData: Record<string, any> = {
-      method: config.method,
-      url: config.url,
-      headers: config.headers,
-      body: config.body,
-      timeout: config.timeout
-    };
-
     try {
+      console.log(`[HttpRequestAction] Original config url: ${config.url}`);
+      console.log(`[HttpRequestAction] Original config body: ${config.body}`);
+
+      // 打印相关变量
+      const extractedUrl = await context.getVariable('extracted_url');
+      console.log(`[HttpRequestAction] extracted_url variable: ${extractedUrl}`);
+
       // 解析变量
       const url = await VariableParser.parse(config.url, context);
-      const body = config.body ? await VariableParser.parse(config.body, context) : undefined;
+      console.log(`[HttpRequestAction] Parsed url: ${url}`);
+
+      let parsedBody: string | undefined = undefined;
+      if (config.body) {
+        console.log(`[HttpRequestAction] Before body parse, body: ${config.body}`);
+        parsedBody = await VariableParser.parse(config.body, context);
+        console.log(`[HttpRequestAction] Parsed body: ${parsedBody}`);
+
+        // 同步日志（确保立即输出）
+        console.log(`[HttpRequestAction SYNC] ====== Body Parse Summary ======`);
+        console.log(`[HttpRequestAction SYNC] Original body contains extracted_url: ${config.body.includes('{extracted_url}')}`);
+        console.log(`[HttpRequestAction SYNC] Parsed body contains extracted_url: ${parsedBody.includes('{extracted_url}')}`);
+        console.log(`[HttpRequestAction SYNC] Parsed body contains actual URL: ${parsedBody.includes('http://xhslink.com')}`);
+        console.log(`[HttpRequestAction SYNC] ==================================`);
+      }
 
       // 解析 headers 中的变量
       const headers: Record<string, string> = {};
@@ -51,7 +63,7 @@ export class HttpRequestAction implements IActionExecutor {
         config.method,
         url,
         headers,
-        body,
+        parsedBody,
         config.timeout || 30000
       );
 
@@ -63,14 +75,20 @@ export class HttpRequestAction implements IActionExecutor {
 
       Logger.info('HttpRequestAction', 'HTTP request completed successfully');
 
-      // 返回执行结果
+      // 返回执行结果（使用解析后的值作为 inputData）
       return {
         status: 'success',
-        inputData: inputData,
+        inputData: {
+          method: config.method,
+          url: url,
+          headers: headers,
+          body: parsedBody,
+          timeout: config.timeout
+        },
         outputData: {
           url: url,
           headers: headers,
-          body: body,
+          body: parsedBody,
           response: response,
           savedToVariable: config.saveResponseTo
         },

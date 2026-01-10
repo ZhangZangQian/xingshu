@@ -513,8 +513,6 @@ struct ExecutionLogDetailPage {
                             .backgroundColor('#F5F7FA')
                             .borderRadius(6)
                             .width('100%')
-                            .maxLines(20)
-                            .textOverflow({ overflow: TextOverflow.Ellipsis })
                         }
                         .width('100%')
                         .alignItems(HorizontalAlign.Start)
@@ -536,8 +534,6 @@ struct ExecutionLogDetailPage {
                               .backgroundColor('#F5F7FA')
                               .borderRadius(6)
                               .width('100%')
-                              .maxLines(20)
-                              .textOverflow({ overflow: TextOverflow.Ellipsis })
                           }
                           .width('100%')
                           .alignItems(HorizontalAlign.Start)

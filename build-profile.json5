@@ -7,11 +7,11 @@
         "material": {
           "certpath": "/Users/zhangyong/.ohos/config/default_xingshu_POS6g2z7jY-LJo5PbRPK3Di1Qg0dwcWMAFh1Ja52ios=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B0B986283F8EC992A788E2954D82495466C4C7AA57CC5831FE7BD308C2C0366C995D2DA8467E825",
+          "keyPassword": "0000001B3CB68EFEC406D18F22E56FCDCEC5530FF779C10ECEAC662BCF521EA5D80EF5DF09B4FA56F5941F",
           "profile": "/Users/zhangyong/.ohos/config/default_xingshu_POS6g2z7jY-LJo5PbRPK3Di1Qg0dwcWMAFh1Ja52ios=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/zhangyong/.ohos/config/default_xingshu_POS6g2z7jY-LJo5PbRPK3Di1Qg0dwcWMAFh1Ja52ios=.p12",
-          "storePassword": "0000001B601CA59B37C68033A3BBCAF7AFD0F9862DBAD9F6F0DE75FEE1643713AED1162EFEFD8EFBE8B5C5"
+          "storePassword": "0000001B617554FE0F03A5AA17F9B37306A3BAED5939E1ABE5C31176B003B16333DAB7F56684F8E6C2EEFA"
         }
       }
     ],

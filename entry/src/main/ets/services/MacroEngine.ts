@@ -148,8 +148,23 @@ export class MacroEngine {
         const action = actions[i];
         Logger.info('MacroEngine', `Executing action ${i + 1}/${actions.length}: ${action.type}`);
 
+        // 打印动作配置
+        console.log(`[MacroEngine] Action ${i + 1} config: ${action.config}`);
+
+        // 打印当前变量状态
+        console.log(`[MacroEngine] Before action ${i + 1}, runtime variables count: ${context.variables.size}`);
+        for (const [key, value] of context.variables.entries()) {
+          console.log(`  ${key} = ${value}`);
+        }
+
         try {
           await this.actionExecutor.execute(action, context);
+
+          // 打印执行后的变量状态
+          console.log(`[MacroEngine] After action ${i + 1}, runtime variables count: ${context.variables.size}`);
+          for (const [key, value] of context.variables.entries()) {
+            console.log(`  ${key} = ${value}`);
+          }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           Logger.error('MacroEngine', `Action ${action.type} failed: ${errorMessage}`);

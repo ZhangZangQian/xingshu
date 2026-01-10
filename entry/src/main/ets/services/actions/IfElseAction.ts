@@ -4,6 +4,7 @@ import { IActionExecutor } from '../ActionExecutor';
 import { ConditionEvaluator } from '../ConditionEvaluator';
 import { ActionExecutor } from '../ActionExecutor';
 import Logger from '../../utils/Logger';
+import { VariableParser } from '../../utils/VariableParser';
 
 const TAG = 'IfElseAction';
 
@@ -81,13 +82,25 @@ export class IfElseAction implements IActionExecutor {
 
       Logger.info(TAG, `[Depth ${this.currentDepth}] Evaluating ${config.branches.length} branches`);
 
-      // 准备输入数据
-      const inputData: Record<string, any> = {
-        branches: config.branches.map(b => ({
+      // 准备输入数据（使用解析后的条件）
+      const parsedBranches: any[] = [];
+      for (const b of config.branches) {
+        const parsedConditions = b.conditions ? await Promise.all(b.conditions.map(async (c) => ({
+          field: await VariableParser.parse(c.field, context),
+          operator: c.operator,
+          value: await VariableParser.parse(c.value, context),
+          logicOperator: c.logicOperator
+        }))) : [];
+        
+        parsedBranches.push({
           name: b.name,
-          conditions: b.conditions,
+          conditions: parsedConditions,
           actionCount: b.actions?.length || 0
-        }))
+        });
+      }
+
+      const inputData: Record<string, any> = {
+        branches: parsedBranches
       };
 
       const outputData: Record<string, any> = {

@@ -21,14 +21,6 @@ export class NotificationAction implements IActionExecutor {
 
     const startTime = Date.now();
 
-    // 准备输入数据
-    const inputData: Record<string, any> = {
-      title: config.title,
-      content: config.content,
-      enableSound: config.enableSound,
-      enableVibration: config.enableVibration
-    };
-
     try {
       // 解析变量
       const title = await VariableParser.parse(config.title, context);
@@ -46,10 +38,15 @@ export class NotificationAction implements IActionExecutor {
 
       Logger.info('NotificationAction', 'Notification sent successfully');
 
-      // 返回执行结果
+      // 返回执行结果（使用解析后的值作为 inputData）
       return {
         status: 'success',
-        inputData: inputData,
+        inputData: {
+          title: title,
+          content: content,
+          enableSound: config.enableSound,
+          enableVibration: config.enableVibration
+        },
         outputData: {
           title: title,
           content: content

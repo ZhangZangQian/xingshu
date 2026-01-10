@@ -83,12 +83,17 @@ export class DialogEventBus {
    * 显示文本输入对话框（由服务层调用）
    */
   public async showTextInput(config: UserDialogConfig): Promise<string> {
+    console.log(`[DialogEventBus] showTextInput called, handler registered: ${this.textInputCallback !== null}`);
     if (!this.textInputCallback) {
       Logger.warn('DialogEventBus', 'TextInput handler not registered, using fallback');
       // 降级方案：返回默认值
-      return config.defaultValue || '';
+      const fallbackValue = config.defaultValue || '';
+      console.log(`[DialogEventBus] Using fallback value: ${fallbackValue}`);
+      return fallbackValue;
     }
-    return await this.textInputCallback(config);
+    const result = await this.textInputCallback(config);
+    console.log(`[DialogEventBus] TextInput callback returned: ${result}`);
+    return result;
   }
 
   /**

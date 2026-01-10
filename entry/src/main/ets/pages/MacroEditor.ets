@@ -438,7 +438,7 @@ struct MacroEditor {
   private applyKuaiXiaoHongTemplate() {
     promptAction.showDialog({
       title: '使用快小红模板',
-      message: '将自动创建：\n1. 手动触发器\n2. 读取剪贴板\n3. 正则提取 URL\n4. 用户对话框（选择爆款标记）\n5. 用户对话框（选择分类标签）\n6. HTTP POST 请求\n7. 打开飞书表格\n\n是否继续？',
+      message: '将自动创建：\n1. 手动触发器\n2. 输入内容（带粘贴按钮）\n3. 正则提取 URL\n4. 用户对话框（选择爆款标记）\n5. 用户对话框（选择分类标签）\n6. HTTP POST 请求\n7. 打开飞书表格\n\n是否继续？',
       buttons: [
         { text: '取消', color: '#000000' },
         { text: '创建', color: '#007DFF' }
@@ -508,18 +508,21 @@ struct MacroEditor {
     };
     this.actions.push(startNotificationAction);
 
-    // 4. 读取剪贴板
-    const clipboardAction: Action = {
+    // 4. 用户输入对话框（支持粘贴）
+    const inputDialogAction: Action = {
       id: Date.now() + 4,
       macroId: this.macroId,
-      type: ActionType.CLIPBOARD_READ,
+      type: ActionType.USER_DIALOG,
       config: JSON.stringify({
-        operation: 'read',
+        type: 'text_input',
+        title: '📋 请输入小红书链接',
+        message: '可直接粘贴剪贴板内容',
+        placeholder: '在此粘贴链接或输入内容...',
         saveToVariable: 'clipboard_content'
       }),
       orderIndex: 3
     };
-    this.actions.push(clipboardAction);
+    this.actions.push(inputDialogAction);
 
     // 5. 正则提取 URL
     const textProcessAction: Action = {
@@ -543,7 +546,7 @@ struct MacroEditor {
       macroId: this.macroId,
       type: ActionType.USER_DIALOG,
       config: JSON.stringify({
-        dialogType: 'single_select',
+        type: 'single_select',
         title: '🔥 请标记内容火爆程度',
         message: '请选择内容的质量等级',
         options: ['⚪ 普通款', '🟡 潜力款', '🔴 大爆款'],
@@ -559,7 +562,7 @@ struct MacroEditor {
       macroId: this.macroId,
       type: ActionType.USER_DIALOG,
       config: JSON.stringify({
-        dialogType: 'single_select',
+        type: 'single_select',
         title: '📑 请选择分类标签',
         message: '便于分类管理',
         options: [
@@ -586,7 +589,7 @@ struct MacroEditor {
       macroId: this.macroId,
       type: ActionType.USER_DIALOG,
       config: JSON.stringify({
-        dialogType: 'single_select',
+        type: 'single_select',
         title: '👍 请标记对标参考度',
         message: '1-5赞，0表示跳过',
         options: ['5 赞👍👍👍👍👍', '4 赞👍👍👍👍', '3 赞👍👍👍', '2 赞👍👍', '1 赞👍', '0 先不选，跳过'],
@@ -602,7 +605,7 @@ struct MacroEditor {
       macroId: this.macroId,
       type: ActionType.USER_DIALOG,
       config: JSON.stringify({
-        dialogType: 'text_input',
+        type: 'text_input',
         title: '📝 请输入收藏备注',
         message: '（选填）',
         placeholder: '输入备注内容...',
@@ -1400,7 +1403,7 @@ struct MacroEditor {
                   .flexGrow(1)
                 }
 
-                Text('包含：读取剪贴板 → URL提取 → 用户选择 → API调用 → 打开飞书')
+                Text('包含：输入内容(带粘贴) → URL提取 → 用户选择 → API调用 → 打开飞书')
                   .fontSize(11)
                   .fontColor('#999999')
                   .maxLines(2)

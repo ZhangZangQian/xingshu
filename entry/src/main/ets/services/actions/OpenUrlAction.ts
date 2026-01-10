@@ -29,12 +29,6 @@ export class OpenUrlAction implements IActionExecutor {
 
     const startTime = Date.now();
 
-    // 准备输入数据
-    const inputData: Record<string, any> = {
-      url: config.url,
-      openWith: config.openWith
-    };
-
     try {
       // 解析变量
       const url = await VariableParser.parse(config.url, executionContext);
@@ -55,10 +49,13 @@ export class OpenUrlAction implements IActionExecutor {
       await this.context.startAbility(want);
       Logger.info('OpenUrlAction', `URL opened successfully: ${url}`);
 
-      // 返回执行结果
+      // 返回执行结果（使用解析后的值作为 inputData）
       return {
         status: 'success',
-        inputData: inputData,
+        inputData: {
+          url: url,
+          openWith: config.openWith
+        },
         outputData: {
           openedUrl: url,
           openWith: config.openWith

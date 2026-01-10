@@ -41,28 +41,48 @@ export class ExecutionContextImpl {
    */
   setVariable(name: string, value: Object): void {
     this.variables.set(name, value);
+    console.log(`[ExecutionContext] Set variable: ${name} = ${value}`);
+    this.dumpRuntimeVariables();
+  }
+
+  /**
+   * 打印所有运行期变量（调试用）
+   */
+  dumpRuntimeVariables(): void {
+    console.log(`[ExecutionContext] All runtime variables (${this.variables.size}):`);
+    for (const [key, value] of this.variables.entries()) {
+      console.log(`  ${key} = ${value}`);
+    }
   }
 
   /**
    * 获取变量 (三级解析: system → runtime → global)
    */
   async getVariable(name: string): Promise<Object | undefined> {
+    console.log(`[ExecutionContext] Getting variable: ${name}`);
+
     // 1. 先查找系统变量
     const systemValue = await this.getSystemVariable(name);
     if (systemValue !== undefined) {
+      console.log(`[ExecutionContext] Found system variable: ${name} = ${systemValue}`);
       return systemValue;
     }
 
     // 2. 再查找运行期变量
     if (this.variables.has(name)) {
-      return this.variables.get(name);
+      const value = this.variables.get(name);
+      console.log(`[ExecutionContext] Found runtime variable: ${name} = ${value}`);
+      return value;
     }
 
     // 3. 最后查找全局变量
     if (this.globalVariables.has(name)) {
-      return this.globalVariables.get(name);
+      const value = this.globalVariables.get(name);
+      console.log(`[ExecutionContext] Found global variable: ${name} = ${value}`);
+      return value;
     }
 
+    console.log(`[ExecutionContext] Variable not found: ${name}`);
     return undefined;
   }
 
