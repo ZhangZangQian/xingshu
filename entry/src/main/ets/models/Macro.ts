@@ -303,6 +303,9 @@ export enum ConditionOperator {
   GREATER_EQUAL = '>=',
   LESS_EQUAL = '<=',
   CONTAINS = 'contains',
+  NOT_CONTAINS = 'not_contains',
+  IS_EMPTY = 'is_empty',
+  IS_NOT_EMPTY = 'is_not_empty',
   REGEX = 'regex'
 }
 
@@ -394,6 +397,7 @@ export interface IfElseConfig {
  */
 export interface Branch {
   name?: string;                   // 分支名称（可选，用于调试和UI显示）
+  conditionLogic?: 'and' | 'or';   // 分支条件关系：'and'（所有条件都满足）或 'or'（任一条件满足），默认为 'and'
   conditions?: BranchCondition[];  // 分支条件（为空表示 else 分支）
   actions: ActionConfig[];         // 分支内的动作列表
 }

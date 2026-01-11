@@ -88,12 +88,12 @@ export class IfElseAction implements IActionExecutor {
         const parsedConditions = b.conditions ? await Promise.all(b.conditions.map(async (c) => ({
           field: await VariableParser.parse(c.field, context),
           operator: c.operator,
-          value: await VariableParser.parse(c.value, context),
-          logicOperator: c.logicOperator
+          value: await VariableParser.parse(c.value, context)
         }))) : [];
-        
+
         parsedBranches.push({
           name: b.name,
+          conditionLogic: b.conditionLogic || 'and',
           conditions: parsedConditions,
           actionCount: b.actions?.length || 0
         });
@@ -127,7 +127,11 @@ export class IfElseAction implements IActionExecutor {
         }
 
         // 评估分支条件
-        const conditionsPassed = await this.evaluateBranchConditions(branch.conditions!, context);
+        const conditionsPassed = await this.evaluateBranchConditions(
+          branch.conditions!,
+          context,
+          branch.conditionLogic || 'and'
+        );
 
         if (conditionsPassed) {
           Logger.info(TAG, `[Depth ${this.currentDepth}] Branch conditions met: ${branchName}`);
@@ -169,14 +173,16 @@ export class IfElseAction implements IActionExecutor {
    *
    * 示例：
    * [
-   *   {"field": "{a}", "operator": "==", "value": "1", "logicOperator": "OR"},
+   *   {"field": "{a}", "operator": "==", "value": "1"},
    *   {"field": "{b}", "operator": "==", "value": "2"}
    * ]
-   * 结果：(a == 1) OR (b == 2)
+   * 结果：如果 logic='and'：(a == 1) AND (b == 2)
+   *       如果 logic='or'：(a == 1) OR (b == 2)
    */
   private async evaluateBranchConditions(
     conditions: BranchCondition[],
-    context: ExecutionContext
+    context: ExecutionContext,
+    logic: 'and' | 'or' = 'and'
   ): Promise<boolean> {
     if (conditions.length === 0) return true;
 
@@ -186,53 +192,19 @@ export class IfElseAction implements IActionExecutor {
       throw new Error('Branch conditions count exceeds maximum (10)');
     }
 
-    let result = true;
-    let currentLogic: 'AND' | 'OR' = 'AND';
+    // 构造 Condition 格式供 ConditionEvaluator 使用
+    const conditionList: any[] = conditions.map(c => ({
+      id: 0,
+      macroId: context.macroId,
+      field: c.field,
+      operator: c.operator,
+      value: c.value
+    }));
 
-    for (let i = 0; i < conditions.length; i++) {
-      const condition = conditions[i];
+    // 使用 ConditionEvaluator 评估所有条件
+    const result = await this.conditionEvaluator.evaluate(conditionList, context, logic);
 
-      // 转换为 Condition 格式供 ConditionEvaluator 使用
-      const singleResult = await this.conditionEvaluator.evaluate(
-        [{
-          id: 0,
-          macroId: context.macroId,
-          field: condition.field,
-          operator: condition.operator,
-          value: condition.value
-        }],
-        context
-      );
-
-      // 根据逻辑运算符合并结果
-      if (i === 0) {
-        result = singleResult;
-      } else {
-        if (currentLogic === 'AND') {
-          result = result && singleResult;
-        } else {
-          result = result || singleResult;
-        }
-      }
-
-      // 设置下一个条件的逻辑运算符
-      currentLogic = condition.logicOperator || 'AND';
-
-      Logger.info(TAG,
-        `  Condition [${condition.field} ${condition.operator} ${condition.value}] = ${singleResult}, combined = ${result}`
-      );
-
-      // 短路优化
-      if (currentLogic === 'AND' && !result) {
-        Logger.info(TAG, '  Short-circuit: AND logic failed, skipping remaining conditions');
-        break;
-      }
-      if (currentLogic === 'OR' && result) {
-        Logger.info(TAG, '  Short-circuit: OR logic succeeded, skipping remaining conditions');
-        break;
-      }
-    }
-
+    Logger.info(TAG, `Branch conditions evaluated with logic '${logic}': result = ${result}`);
     return result;
   }
 

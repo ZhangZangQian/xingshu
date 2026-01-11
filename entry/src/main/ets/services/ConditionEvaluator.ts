@@ -20,32 +20,45 @@ export class ConditionEvaluator {
   }
 
   /**
-   * 评估条件列表（所有条件必须都为 true）
+   * 评估条件列表
    *
    * @param conditions 条件列表
    * @param context 执行上下文
+   * @param logic 条件关系：'and'（所有条件都满足）或 'or'（任一条件满足），默认为 'and'
    * @returns 是否通过条件
    */
-  public async evaluate(conditions: Condition[], context: ExecutionContext): Promise<boolean> {
+  public async evaluate(conditions: Condition[], context: ExecutionContext, logic: 'and' | 'or' = 'and'): Promise<boolean> {
     if (conditions.length === 0) {
       return true;
     }
 
-    Logger.info('ConditionEvaluator', `Evaluating ${conditions.length} conditions`);
+    Logger.info('ConditionEvaluator', `Evaluating ${conditions.length} conditions with logic: ${logic}`);
 
     for (const condition of conditions) {
       const result = await this.evaluateSingleCondition(condition, context);
       Logger.info('ConditionEvaluator',
         `Condition [${condition.field} ${condition.operator} ${condition.value}] = ${result}`);
 
-      if (!result) {
-        Logger.info('ConditionEvaluator', 'Condition failed, stopping evaluation');
-        return false;
+      if (logic === 'or') {
+        // OR 逻辑：任一条件满足即返回 true
+        if (result) {
+          Logger.info('ConditionEvaluator', 'Condition passed (OR logic), stopping evaluation');
+          return true;
+        }
+      } else {
+        // AND 逻辑：任一条件不满足即返回 false
+        if (!result) {
+          Logger.info('ConditionEvaluator', 'Condition failed (AND logic), stopping evaluation');
+          return false;
+        }
       }
     }
 
-    Logger.info('ConditionEvaluator', 'All conditions passed');
-    return true;
+    // AND 逻辑：所有条件都满足返回 true
+    // OR 逻辑：所有条件都不满足返回 false
+    const finalResult = logic === 'and';
+    Logger.info('ConditionEvaluator', `Evaluation complete, result: ${finalResult}`);
+    return finalResult;
   }
 
   /**
@@ -79,6 +92,15 @@ export class ConditionEvaluator {
 
         case ConditionOperator.CONTAINS:
           return this.compareContains(fieldValueStr, expectedValueStr);
+
+        case ConditionOperator.NOT_CONTAINS:
+          return !this.compareContains(fieldValueStr, expectedValueStr);
+
+        case ConditionOperator.IS_EMPTY:
+          return this.compareIsEmpty(fieldValueStr);
+
+        case ConditionOperator.IS_NOT_EMPTY:
+          return !this.compareIsEmpty(fieldValueStr);
 
         case ConditionOperator.REGEX:
           return this.compareRegex(fieldValueStr, expectedValueStr);
@@ -164,5 +186,38 @@ export class ConditionEvaluator {
       Logger.error('ConditionEvaluator', `Invalid regex pattern: ${pattern}, error: ${errorMessage}`);
       return false;
     }
+  }
+
+  /**
+   * 检查值是否为空
+   * 判断标准：null、undefined、空字符串、空数组、空对象
+   */
+  private compareIsEmpty(value: string): boolean {
+    // 检查 null 或 undefined
+    if (value === null || value === undefined) {
+      return true;
+    }
+
+    // 检查空字符串（包括仅包含空白字符）
+    if (typeof value === 'string' && value.trim() === '') {
+      return true;
+    }
+
+    // 尝试解析 JSON 对象/数组
+    try {
+      const parsed = JSON.parse(value);
+      // 空数组
+      if (Array.isArray(parsed) && parsed.length === 0) {
+        return true;
+      }
+      // 空对象
+      if (typeof parsed === 'object' && parsed !== null && Object.keys(parsed).length === 0) {
+        return true;
+      }
+    } catch (error) {
+      // 不是 JSON，继续使用字符串判断
+    }
+
+    return false;
   }
 }

@@ -36,6 +36,7 @@ interface BaseBranchActionConfig {
 
 export interface BranchConfig {
   name: string;
+  conditionLogic: string; // 'and' 或 'or'
   conditions: BranchCondition[];
   actions: BaseBranchActionConfig[];
 }
@@ -74,6 +75,9 @@ export struct ActionConfigEditor {
   @State conditionField: string = '';
   @State conditionOperator: string = '==';
   @State conditionValue: string = '';
+  // 变量选择器状态
+  @State showVariableSelector: boolean = false;
+  @State editingConditionForVariable: number = -1;
 
   aboutToAppear() {
     // 初始化配置数据
@@ -520,28 +524,38 @@ export struct ActionConfigEditor {
   }
 
   build() {
-    Column() {
-      // 统一顶部标题栏（需要避让状态栏）
-      CommonTopBar({
-        title: this.isEditMode ? `编辑${this.getActionTypeName()}` : `添加${this.getActionTypeName()}`,
-        avoidStatusBar: true, // 自定义对话框需要避让状态栏
-        onLeftClick: () => { this.handleCancel(); },
-        onRightClick: () => { this.handleSave(); }
-      })
+    Stack({ alignContent: Alignment.Top }) {
+      Column() {
+        // 统一顶部标题栏（需要避让状态栏）
+        CommonTopBar({
+          title: this.isEditMode ? `编辑${this.getActionTypeName()}` : `添加${this.getActionTypeName()}`,
+          avoidStatusBar: true, // 自定义对话框需要避让状态栏
+          onLeftClick: () => { this.handleCancel(); },
+          onRightClick: () => { this.handleSave(); }
+        })
 
-      Divider()
+        Divider()
 
-      // 表单内容区（根据动作类型显示不同表单）
-      Scroll() {
-        Column() {
-          this.buildFormContent();
+        // 表单内容区（根据动作类型显示不同表单）
+        Scroll() {
+          Column() {
+            this.buildFormContent();
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 34 })
+          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
         }
-        .width('100%')
-        .padding(16)
+        .flexGrow(1)
+        .scrollBar(BarState.Auto)
+        .backgroundColor('#f5f5f5')
       }
-      .flexGrow(1)
-      .scrollBar(BarState.Auto)
-      .backgroundColor('#f5f5f5')
+      .width('100%')
+      .height('100%')
+
+      // 变量选择器对话框
+      if (this.showVariableSelector) {
+        this.buildVariableSelectorDialog()
+      }
     }
     .width('100%')
     .height('100%')
@@ -1184,9 +1198,10 @@ export struct ActionConfigEditor {
       .width('100%')
     }
     .width('100%')
-    .padding(16)
+    .padding({ left: 16, right: 16, top: 16, bottom: 34 })
     .backgroundColor('#ffffff')
     .borderRadius(8)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   /**
@@ -1351,9 +1366,10 @@ export struct ActionConfigEditor {
       .width('100%')
     }
     .width('100%')
-    .padding(16)
+    .padding({ left: 16, right: 16, top: 16, bottom: 34 })
     .backgroundColor('#ffffff')
     .borderRadius(8)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   /**
@@ -1457,6 +1473,10 @@ export struct ActionConfigEditor {
             .fontSize(12)
             .fontColor('#999999')
             .alignSelf(ItemAlign.Start)
+          Text('• "为空"判断：null、undefined、空字符串、空数组、空对象')
+            .fontSize(12)
+            .fontColor('#999999')
+            .alignSelf(ItemAlign.Start)
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
@@ -1467,7 +1487,8 @@ export struct ActionConfigEditor {
       .borderRadius(8)
     }
     .width('100%')
-    .padding(16)
+    .padding({ left: 16, right: 16, top: 16, bottom: 34 })
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   /**
@@ -1489,9 +1510,21 @@ export struct ActionConfigEditor {
               .fontSize(12)
               .fontColor('#ff9800')
           } else {
-            Text(`${branch.conditions.length} 个条件 · ${branch.actions.length} 个动作`)
-              .fontSize(12)
-              .fontColor('#666666')
+            Row({ space: 4 }) {
+              Text(`${branch.conditions.length} 个条件`)
+                .fontSize(12)
+                .fontColor('#666666')
+
+              if (branch.conditions.length >= 2) {
+                Text(branch.conditionLogic === 'and' ? '(AND)' : '(OR)')
+                  .fontSize(12)
+                  .fontColor('#1890ff')
+              }
+
+              Text(`· ${branch.actions.length} 个动作`)
+                .fontSize(12)
+                .fontColor('#666666')
+            }
           }
         }
         .alignItems(HorizontalAlign.Start)
@@ -1527,11 +1560,21 @@ export struct ActionConfigEditor {
       // 条件预览
       if (branch.conditions.length > 0) {
         Column({ space: 8 }) {
-          Text('条件')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#666666')
-            .alignSelf(ItemAlign.Start)
+          Row() {
+            Text('条件')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#666666')
+
+            if (branch.conditions.length >= 2) {
+              Text(branch.conditionLogic === 'and' ? '· 且（AND）' : '· 或（OR）')
+                .fontSize(11)
+                .fontColor('#1890ff')
+                .margin({ left: 6 })
+            }
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
 
           Column({ space: 6 }) {
             ForEach(branch.conditions, (condition: BranchCondition, condIndex: number) => {
@@ -1542,16 +1585,31 @@ export struct ActionConfigEditor {
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                Text(condition.operator)
+                Text(this.getOperatorLabel(condition.operator))
                   .fontSize(13)
                   .fontColor('#666666')
 
-                Text(condition.value)
-                  .fontSize(13)
-                  .fontColor('#52c41a')
-                  .flexGrow(1)
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                // 仅当操作符不是"为空"或"不为空"时显示值
+                if (condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty') {
+                  Text(condition.value)
+                    .fontSize(13)
+                    .fontColor('#52c41a')
+                    .flexGrow(1)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                } else {
+                  Blank()
+                }
+
+                // 条件关系标识
+                if (condIndex < branch.conditions.length - 1) {
+                  Text(branch.conditionLogic === 'and' ? 'AND' : 'OR')
+                    .fontSize(10)
+                    .fontColor('#999999')
+                    .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                    .backgroundColor('#f0f0f0')
+                    .borderRadius(4)
+                }
               }
               .width('100%')
               .alignItems(VerticalAlign.Center)
@@ -1613,18 +1671,6 @@ export struct ActionConfigEditor {
   @Builder
   buildBranchEditor() {
     Column({ space: 16 }) {
-      // 返回按钮
-      Button('← 返回分支列表')
-        .fontSize(14)
-        .height(36)
-        .backgroundColor('#f5f5f5')
-        .fontColor('#666666')
-        .borderRadius(18)
-        .onClick(() => {
-          this.showBranchEditor = false;
-        })
-        .alignSelf(ItemAlign.Start)
-
       // 分支名称
       Column({ space: 8 }) {
         Text('分支名称')
@@ -1643,9 +1689,7 @@ export struct ActionConfigEditor {
           .backgroundColor('#f5f5f5')
           .borderRadius(8)
           .onChange((value: string) => {
-            const branch = this.branches[this.editingBranchIndex];
-            branch.name = value;
-            this.updateBranchInConfig();
+            this.updateBranchName(this.editingBranchIndex, value);
           })
       }
       .alignItems(HorizontalAlign.Start)
@@ -1674,6 +1718,57 @@ export struct ActionConfigEditor {
         .width('100%')
         .alignItems(VerticalAlign.Center)
 
+        // 条件关系选择器（仅在有多个条件时显示）
+        if (this.branches[this.editingBranchIndex].conditions.length >= 2) {
+          Row({ space: 12 }) {
+            Text('条件关系：')
+              .fontSize(13)
+              .fontColor('#666666')
+
+            Row({ space: 8 }) {
+              Button('且（AND）')
+                .fontSize(12)
+                .height(30)
+                .padding({ left: 12, right: 12 })
+                .backgroundColor(this.branches[this.editingBranchIndex].conditionLogic === 'and' ? '#007DFF' : '#f0f0f0')
+                .fontColor(this.branches[this.editingBranchIndex].conditionLogic === 'and' ? '#ffffff' : '#333333')
+                .borderRadius(15)
+                .onClick(() => {
+                  this.updateConditionLogic('and');
+                })
+
+              Button('或（OR）')
+                .fontSize(12)
+                .height(30)
+                .padding({ left: 12, right: 12 })
+                .backgroundColor(this.branches[this.editingBranchIndex].conditionLogic === 'or' ? '#007DFF' : '#f0f0f0')
+                .fontColor(this.branches[this.editingBranchIndex].conditionLogic === 'or' ? '#ffffff' : '#333333')
+                .borderRadius(15)
+                .onClick(() => {
+                  this.updateConditionLogic('or');
+                })
+            }
+          }
+          .width('100%')
+          .padding({ left: 4, right: 4, top: 4, bottom: 8 })
+          .alignItems(VerticalAlign.Center)
+
+          // 关系说明
+          if (this.branches[this.editingBranchIndex].conditionLogic === 'and') {
+            Text('所有条件都满足时执行')
+              .fontSize(12)
+              .fontColor('#999999')
+              .width('100%')
+              .padding({ left: 4 })
+          } else {
+            Text('任一条件满足时执行')
+              .fontSize(12)
+              .fontColor('#999999')
+              .width('100%')
+              .padding({ left: 4 })
+          }
+        }
+
         if (this.branches[this.editingBranchIndex].conditions.length === 0) {
           Column() {
             Text('else 分支（无条件）')
@@ -1685,10 +1780,38 @@ export struct ActionConfigEditor {
           .backgroundColor('#fff7e6')
           .borderRadius(8)
         } else {
-          ForEach(this.branches[this.editingBranchIndex].conditions,
-            (condition: BranchCondition, condIndex: number) => {
-              this.buildConditionCard(condition, condIndex);
-            }, (condition: BranchCondition, condIndex: number) => `${condIndex}`)
+          Column({ space: 8 }) {
+            ForEach(this.branches[this.editingBranchIndex].conditions,
+              (condition: BranchCondition, condIndex: number) => {
+                Column({ space: 8 }) {
+                  this.buildConditionCard(condition, condIndex);
+
+                  // 条件关系标识（最后一个不显示）
+                  if (condIndex < this.branches[this.editingBranchIndex].conditions.length - 1) {
+                    Row() {
+                      Blank()
+                      if (this.branches[this.editingBranchIndex].conditionLogic === 'and') {
+                        Text('AND')
+                          .fontSize(12)
+                          .fontColor('#999999')
+                          .fontWeight(FontWeight.Medium)
+                      } else {
+                        Text('OR')
+                          .fontSize(12)
+                          .fontColor('#1890ff')
+                          .fontWeight(FontWeight.Medium)
+                      }
+                      Blank()
+                    }
+                    .width('100%')
+                    .height(24)
+                    .alignItems(VerticalAlign.Center)
+                  }
+                }
+                .width('100%')
+              }, (condition: BranchCondition, condIndex: number) => `${condIndex}`)
+          }
+          .width('100%')
         }
       }
       .alignItems(HorizontalAlign.Start)
@@ -1717,16 +1840,20 @@ export struct ActionConfigEditor {
         .width('100%')
         .alignItems(VerticalAlign.Center)
 
-        ForEach(this.branches[this.editingBranchIndex].actions,
-          (action: BaseBranchActionConfig, actionIndex: number) => {
-            this.buildActionCard(action, actionIndex);
-          }, (action: BaseBranchActionConfig, actionIndex: number) => `${actionIndex}`)
+        Column({ space: 12 }) {
+          ForEach(this.branches[this.editingBranchIndex].actions,
+            (action: BaseBranchActionConfig, actionIndex: number) => {
+              this.buildActionCard(action, actionIndex);
+            }, (action: BaseBranchActionConfig, actionIndex: number) => `${actionIndex}`)
+        }
+        .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
     }
     .width('100%')
-    .padding(16)
+    .padding({ bottom: 16 })
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   /**
@@ -1742,19 +1869,34 @@ export struct ActionConfigEditor {
             .fontSize(11)
             .fontColor('#999999')
 
-          TextInput({
-            placeholder: '{变量}',
-            text: condition.field
-          })
-            .fontSize(13)
-            .height(36)
-            .padding({ left: 10, right: 10 })
-            .backgroundColor('#f5f5f5')
-            .borderRadius(6)
-            .onChange((value: string) => {
-              condition.field = value;
-              this.updateBranchInConfig();
+          Row() {
+            TextInput({
+              placeholder: '{变量}',
+              text: this.branches[this.editingBranchIndex].conditions[condIndex].field
             })
+              .fontSize(13)
+              .height(36)
+              .layoutWeight(1)
+              .padding({ left: 10, right: 10 })
+              .backgroundColor('#f5f5f5')
+              .borderRadius(6)
+              .onChange((value: string) => {
+                this.updateConditionField(condIndex, value);
+              })
+
+            Button('选择')
+              .fontSize(11)
+              .height(36)
+              .padding({ left: 8, right: 8 })
+              .backgroundColor('#e6f7ff')
+              .fontColor('#1890ff')
+              .borderRadius(6)
+              .margin({ left: 8 })
+              .onClick(() => {
+                this.openVariableSelector(condIndex);
+              })
+          }
+          .width('100%')
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
@@ -1773,10 +1915,12 @@ export struct ActionConfigEditor {
             { value: '>=' },
             { value: '<=' },
             { value: '包含' },
-            { value: '不包含' }
+            { value: '不包含' },
+            { value: 'is_empty' },
+            { value: 'is_not_empty' }
           ])
-            .selected(this.getOperatorIndex(condition.operator))
-            .value(this.getOperatorLabel(condition.operator))
+            .selected(this.getOperatorIndex(this.branches[this.editingBranchIndex].conditions[condIndex].operator))
+            .value(this.getOperatorLabel(this.branches[this.editingBranchIndex].conditions[condIndex].operator))
             .font({ size: 13 })
             .selectedOptionFont({ size: 13 })
             .optionFont({ size: 13 })
@@ -1784,34 +1928,35 @@ export struct ActionConfigEditor {
             .backgroundColor('#f5f5f5')
             .borderRadius(6)
             .onSelect((index: number, value: string) => {
-              condition.operator = value;
-              this.updateBranchInConfig();
+              this.updateConditionOperator(condIndex, value);
             })
         }
         .alignItems(HorizontalAlign.Start)
 
-        // 值输入
-        Column({ space: 4 }) {
-          Text('值')
-            .fontSize(11)
-            .fontColor('#999999')
+        // 值输入（仅当操作符不是"为空"或"不为空"时显示）
+        if (this.branches[this.editingBranchIndex].conditions[condIndex].operator !== 'is_empty' &&
+            this.branches[this.editingBranchIndex].conditions[condIndex].operator !== 'is_not_empty') {
+          Column({ space: 4 }) {
+            Text('值')
+              .fontSize(11)
+              .fontColor('#999999')
 
-          TextInput({
-            placeholder: '比较值',
-            text: condition.value
-          })
-            .fontSize(13)
-            .height(36)
-            .padding({ left: 10, right: 10 })
-            .backgroundColor('#f5f5f5')
-            .borderRadius(6)
-            .onChange((value: string) => {
-              condition.value = value;
-              this.updateBranchInConfig();
+            TextInput({
+              placeholder: '比较值',
+              text: this.branches[this.editingBranchIndex].conditions[condIndex].value
             })
+              .fontSize(13)
+              .height(36)
+              .padding({ left: 10, right: 10 })
+              .backgroundColor('#f5f5f5')
+              .borderRadius(6)
+              .onChange((value: string) => {
+                this.updateConditionValue(condIndex, value);
+              })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
         }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -1885,12 +2030,23 @@ export struct ActionConfigEditor {
   private addBranch() {
     const newBranch: BranchConfig = {
       name: `分支 ${this.branches.length + 1}`,
+      conditionLogic: 'and',
       conditions: [],
       actions: []
     };
-    this.branches.push(newBranch);
-    this.editBranch(this.branches.length - 1);
+
+    // 创建新的 branches 数组以触发响应式更新
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      newBranches.push(this.branches[i]);
+    }
+    newBranches.push(newBranch);
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
     this.updateBranchInConfig();
+
+    this.editBranch(this.branches.length - 1);
   }
 
   /**
@@ -1905,7 +2061,16 @@ export struct ActionConfigEditor {
    * 删除分支
    */
   private deleteBranch(index: number) {
-    this.branches.splice(index, 1);
+    // 创建新的 branches 数组以触发响应式更新
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i !== index) {
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
     this.updateBranchInConfig();
   }
 
@@ -1918,7 +2083,45 @@ export struct ActionConfigEditor {
       operator: '==',
       value: 'value'
     };
-    this.branches[this.editingBranchIndex].conditions.push(newCondition);
+
+    // 创建新的 branches 数组以触发响应式更新
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有现有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          newBranch.conditions.push({
+            field: this.branches[i].conditions[j].field,
+            operator: this.branches[i].conditions[j].operator,
+            value: this.branches[i].conditions[j].value
+          });
+        }
+
+        // 添加新条件
+        newBranch.conditions.push(newCondition);
+
+        // 复制所有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
     this.updateBranchInConfig();
   }
 
@@ -1926,7 +2129,310 @@ export struct ActionConfigEditor {
    * 删除条件
    */
   private deleteCondition(condIndex: number) {
-    this.branches[this.editingBranchIndex].conditions.splice(condIndex, 1);
+    // 创建新的 branches 数组以触发响应式更新
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件（跳过要删除的条件）
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          if (j !== condIndex) {
+            newBranch.conditions.push({
+              field: this.branches[i].conditions[j].field,
+              operator: this.branches[i].conditions[j].operator,
+              value: this.branches[i].conditions[j].value
+            });
+          }
+        }
+
+        // 复制所有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 打开变量选择器
+   */
+  private openVariableSelector(condIndex: number) {
+    this.editingConditionForVariable = condIndex;
+    this.showVariableSelector = true;
+  }
+
+  /**
+   * 选择变量后的回调
+   */
+  private handleVariableSelected(variableName: string) {
+    if (this.editingConditionForVariable >= 0) {
+      // 格式化为 {variable_name}
+      if (!variableName.startsWith('{')) {
+        variableName = `{${variableName}}`;
+      }
+      // 使用辅助方法更新
+      this.updateConditionField(this.editingConditionForVariable, variableName);
+    }
+    this.showVariableSelector = false;
+    this.editingConditionForVariable = -1;
+  }
+
+  /**
+   * 取消选择变量
+   */
+  private handleVariableSelectorCancel() {
+    this.showVariableSelector = false;
+    this.editingConditionForVariable = -1;
+  }
+
+  /**
+   * 更新条件字段（触发响应式更新）
+   */
+  private updateConditionField(condIndex: number, field: string) {
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          if (j === condIndex) {
+            // 修改选中的条件
+            newBranch.conditions.push({
+              field: field,
+              operator: this.branches[i].conditions[j].operator,
+              value: this.branches[i].conditions[j].value
+            });
+          } else {
+            // 复制其他条件
+            newBranch.conditions.push({
+              field: this.branches[i].conditions[j].field,
+              operator: this.branches[i].conditions[j].operator,
+              value: this.branches[i].conditions[j].value
+            });
+          }
+        }
+
+        // 复制所有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 更新条件操作符（触发响应式更新）
+   */
+  private updateConditionOperator(condIndex: number, operator: string) {
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          if (j === condIndex) {
+            // 修改选中的条件
+            newBranch.conditions.push({
+              field: this.branches[i].conditions[j].field,
+              operator: operator,
+              value: this.branches[i].conditions[j].value
+            });
+          } else {
+            // 复制其他条件
+            newBranch.conditions.push({
+              field: this.branches[i].conditions[j].field,
+              operator: this.branches[i].conditions[j].operator,
+              value: this.branches[i].conditions[j].value
+            });
+          }
+        }
+
+        // 复制所有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 更新条件值（触发响应式更新）
+   */
+  private updateConditionValue(condIndex: number, value: string) {
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          if (j === condIndex) {
+            // 修改选中的条件
+            newBranch.conditions.push({
+              field: this.branches[i].conditions[j].field,
+              operator: this.branches[i].conditions[j].operator,
+              value: value
+            });
+          } else {
+            // 复制其他条件
+            newBranch.conditions.push({
+              field: this.branches[i].conditions[j].field,
+              operator: this.branches[i].conditions[j].operator,
+              value: this.branches[i].conditions[j].value
+            });
+          }
+        }
+
+        // 复制所有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 更新条件关系（AND/OR）
+   */
+  private updateConditionLogic(logic: string) {
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: logic,
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          newBranch.conditions.push({
+            field: this.branches[i].conditions[j].field,
+            operator: this.branches[i].conditions[j].operator,
+            value: this.branches[i].conditions[j].value
+          });
+        }
+
+        // 复制所有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
+    this.updateBranchInConfig();
+  }
+
+  /**
+   * 更新分支名称（触发响应式更新）
+   */
+  private updateBranchName(branchIndex: number, name: string) {
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === branchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          newBranch.conditions.push({
+            field: this.branches[i].conditions[j].field,
+            operator: this.branches[i].conditions[j].operator,
+            value: this.branches[i].conditions[j].value
+          });
+        }
+
+        // 复制所有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
     this.updateBranchInConfig();
   }
 
@@ -1945,7 +2451,45 @@ export struct ActionConfigEditor {
       type: 'notification',
       config: config
     };
-    this.branches[this.editingBranchIndex].actions.push(newAction);
+
+    // 创建新的 branches 数组以触发响应式更新
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          newBranch.conditions.push({
+            field: this.branches[i].conditions[j].field,
+            operator: this.branches[i].conditions[j].operator,
+            value: this.branches[i].conditions[j].value
+          });
+        }
+
+        // 复制所有现有动作
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          newBranch.actions.push(this.branches[i].actions[k]);
+        }
+
+        // 添加新动作
+        newBranch.actions.push(newAction);
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
     this.updateBranchInConfig();
   }
 
@@ -1953,7 +2497,43 @@ export struct ActionConfigEditor {
    * 删除动作
    */
   private deleteAction(actionIndex: number) {
-    this.branches[this.editingBranchIndex].actions.splice(actionIndex, 1);
+    // 创建新的 branches 数组以触发响应式更新
+    const newBranches: BranchConfig[] = [];
+    for (let i = 0; i < this.branches.length; i++) {
+      if (i === this.editingBranchIndex) {
+        // 创建新分支
+        const newBranch: BranchConfig = {
+          name: this.branches[i].name,
+          conditionLogic: this.branches[i].conditionLogic || 'and',
+          conditions: [],
+          actions: []
+        };
+
+        // 复制所有条件
+        for (let j = 0; j < this.branches[i].conditions.length; j++) {
+          newBranch.conditions.push({
+            field: this.branches[i].conditions[j].field,
+            operator: this.branches[i].conditions[j].operator,
+            value: this.branches[i].conditions[j].value
+          });
+        }
+
+        // 复制所有动作（跳过要删除的动作）
+        for (let k = 0; k < this.branches[i].actions.length; k++) {
+          if (k !== actionIndex) {
+            newBranch.actions.push(this.branches[i].actions[k]);
+          }
+        }
+
+        newBranches.push(newBranch);
+      } else {
+        // 复制其他分支
+        newBranches.push(this.branches[i]);
+      }
+    }
+
+    // 更新 branches 触发 UI 刷新
+    this.branches = newBranches;
     this.updateBranchInConfig();
   }
 
@@ -1976,7 +2556,9 @@ export struct ActionConfigEditor {
       '>=': '大于等于',
       '<=': '小于等于',
       '包含': '包含',
-      '不包含': '不包含'
+      '不包含': '不包含',
+      'is_empty': '为空',
+      'is_not_empty': '不为空'
     };
     return labels[operator] || operator;
   }
@@ -1985,7 +2567,7 @@ export struct ActionConfigEditor {
    * 获取操作符索引
    */
   private getOperatorIndex(operator: string): number {
-    const operators = ['==', '!=', '>', '<', '>=', '<=', '包含', '不包含'];
+    const operators = ['==', '!=', '>', '<', '>=', '<=', '包含', '不包含', 'is_empty', 'is_not_empty'];
     return operators.indexOf(operator);
   }
 
@@ -2111,9 +2693,10 @@ export struct ActionConfigEditor {
       .borderRadius(8)
     }
     .width('100%')
-    .padding(16)
+    .padding({ left: 16, right: 16, top: 16, bottom: 34 })
     .backgroundColor('#ffffff')
     .borderRadius(8)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   /**
@@ -2232,9 +2815,10 @@ export struct ActionConfigEditor {
       .borderRadius(8)
     }
     .width('100%')
-    .padding(16)
+    .padding({ left: 16, right: 16, top: 16, bottom: 34 })
     .backgroundColor('#ffffff')
     .borderRadius(8)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   /**
@@ -2371,5 +2955,152 @@ export struct ActionConfigEditor {
       .width('100%')
     }
     .width('100%')
+    .padding({ left: 16, right: 16, top: 16, bottom: 34 })
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+
+  /**
+   * 构建变量选择器对话框
+   */
+  @Builder
+  buildVariableSelectorDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      // 蒙层
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0, 0, 0, 0.5)')
+        .onClick(() => {
+          this.handleVariableSelectorCancel();
+        })
+
+      // 变量选择器内容
+      Column({ space: 0 }) {
+        // 标题栏
+        Row() {
+          Text('选择变量')
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .flexGrow(1)
+
+          Button('取消')
+            .fontSize(16)
+            .backgroundColor(Color.Transparent)
+            .fontColor('#007DFF')
+            .onClick(() => {
+              this.handleVariableSelectorCancel();
+            })
+        }
+        .width('100%')
+        .padding(16)
+        .backgroundColor('#ffffff')
+
+        Divider()
+
+        // 变量列表
+        Scroll() {
+          Column() {
+            this.buildVariableSection('系统变量', 'system', '#52c41a');
+            this.buildVariableSection('运行时变量', 'runtime', '#1890ff');
+          }
+          .width('100%')
+        }
+        .height(400)
+        .scrollBar(BarState.Auto)
+      }
+      .width('90%')
+      .height(500)
+      .backgroundColor('#ffffff')
+      .borderRadius(12)
+      .shadow({ radius: 24, color: '#00000033', offsetX: 0, offsetY: 4 })
+    }
+    .width('100%')
+    .height('100%')
+    .position({ x: 0, y: 0 })
+    .zIndex(100)
+  }
+
+  /**
+   * 构建变量分组
+   */
+  @Builder
+  buildVariableSection(title: string, type: string, color: string) {
+    if (this.getFilteredVariables(type).length > 0) {
+      Column() {
+        // 分组标题
+        Text(title)
+          .fontSize(14)
+          .fontColor('#999999')
+          .margin({ left: 16, top: 16, bottom: 8 })
+
+        // 变量列表
+        Column() {
+          ForEach(this.getFilteredVariables(type), (variable: VariableOption) => {
+            this.buildVariableItem(variable, color);
+          }, (variable: VariableOption) => variable.name)
+        }
+        .width('100%')
+        .backgroundColor('#ffffff')
+        .borderRadius(8)
+        .margin({ left: 16, right: 16 })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    }
+  }
+
+  /**
+   * 过滤变量列表
+   */
+  private getFilteredVariables(type: string): VariableOption[] {
+    return this.availableVariables
+      .filter(v => v.type === type);
+  }
+
+  /**
+   * 构建变量项
+   */
+  @Builder
+  buildVariableItem(variable: VariableOption, color: string) {
+    Row() {
+      // 变量类型指示器
+      Text()
+        .width(4)
+        .height(40)
+        .backgroundColor(color)
+        .margin({ right: 12 })
+
+      // 变量信息
+      Column({ space: 4 }) {
+        Text(variable.displayName)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#333333')
+
+        if (variable.description) {
+          Text(variable.description)
+            .fontSize(12)
+            .fontColor('#999999')
+        }
+
+        if (variable.sourceActionIndex !== undefined) {
+          Text(`来自动作 ${variable.sourceActionIndex + 1}`)
+            .fontSize(12)
+            .fontColor('#999999')
+        }
+      }
+      .flexGrow(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Top)
+    .padding(12)
+    .onClick(() => {
+      this.handleVariableSelected(variable.name);
+    })
+
+    Divider()
+      .strokeWidth(0.5)
+      .color('#f0f0f0')
   }
 }
