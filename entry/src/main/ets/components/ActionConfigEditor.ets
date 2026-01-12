@@ -87,7 +87,7 @@ export struct ActionConfigEditor {
   /**
    * 当 action 属性变化时调用（@Watch 回调）
    */
-  onActionChanged() {
+  onActionChanged(): void {
     console.info('[ActionConfigEditor] Action changed, reinitializing config');
     this.initializeConfigData();
   }
@@ -134,10 +134,10 @@ export struct ActionConfigEditor {
     this.configData = newConfig;
   }
 
-  /**
-   * 保存配置
-   */
-  private handleSave() {
+   /**
+    * 保存配置
+    */
+  private handleSave(): void {
     try {
       console.info('[ActionConfigEditor] Starting save process');
       console.info('[ActionConfigEditor] Current configData:', JSON.stringify(this.configData));
@@ -149,7 +149,7 @@ export struct ActionConfigEditor {
       }
 
       // 验证配置
-      const errors = this.validateConfig();
+      const errors: string[] = this.validateConfig();
       if (errors.length > 0) {
         console.error('[ActionConfigEditor] Validation errors:', errors.join(', '));
         AlertDialog.show({

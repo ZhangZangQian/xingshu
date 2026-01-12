@@ -1,6 +1,6 @@
 import relationalStore from '@ohos.data.relationalStore';
 import { Context } from '@kit.AbilityKit';
-import { Macro, Trigger, Action, Condition, ExecutionLog, ActionExecutionLog } from '../models/Macro';
+import { Macro, Trigger, Action, Condition, ExecutionLog, ActionExecutionLog, Folder } from '../models/Macro';
 import {
   Variable,
   VariableInput,
@@ -64,7 +64,7 @@ export class DatabaseService {
         // 重新创建数据库
         this.store = await relationalStore.getRdbStore(context, config);
         await this.createTables();
-        Logger.info('DatabaseService', 'Database rebuilt successfully');
+        Logger.info('DatabaseService', 'Database rebuilt successfully (added json_process action type)');
       } else {
         Logger.info('DatabaseService', 'Database is up to date');
       }
@@ -89,7 +89,7 @@ export class DatabaseService {
       // 尝试插入一个测试记录，检查是否包含新的动作类型约束
       const testAction: relationalStore.ValuesBucket = {
         macro_id: -1,
-        type: 'set_variable',
+        type: 'json_process',
         config: '{}',
         order_index: 0
       };
@@ -134,7 +134,22 @@ export class DatabaseService {
       throw new Error('Database not initialized');
     }
 
+    // 启用外键约束
+    await this.store.executeSql('PRAGMA foreign_keys = ON;');
+
     const createTableSQLs = [
+      // 文件夹表
+      `CREATE TABLE IF NOT EXISTS folder (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL CHECK(LENGTH(name) >= 1 AND LENGTH(name) <= 30),
+        icon TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+
+      // 创建索引
+      `CREATE INDEX IF NOT EXISTS idx_folder_name ON folder(name)`,
+
       // 宏定义表
       `CREATE TABLE IF NOT EXISTS macro (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,12 +157,15 @@ export class DatabaseService {
         description TEXT,
         icon TEXT,
         enabled INTEGER DEFAULT 1 CHECK(enabled IN (0, 1)),
+        folder_id INTEGER,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (folder_id) REFERENCES folder(id) ON DELETE SET NULL
       )`,
 
       // 创建索引
       `CREATE INDEX IF NOT EXISTS idx_macro_enabled ON macro(enabled)`,
+      `CREATE INDEX IF NOT EXISTS idx_macro_folder_id ON macro(folder_id)`,
       `CREATE INDEX IF NOT EXISTS idx_macro_updated_at ON macro(updated_at DESC)`,
 
       // 触发器表
@@ -172,7 +190,7 @@ export class DatabaseService {
           'launch_app', 'notification', 'http_request',
           'clipboard_read', 'clipboard_write',
           'open_url', 'text_process', 'user_dialog',
-          'set_variable', 'if_else'
+          'set_variable', 'if_else', 'json_process'
         )),
         config TEXT NOT NULL,
         order_index INTEGER NOT NULL DEFAULT 0,
@@ -266,6 +284,230 @@ export class DatabaseService {
     Logger.info('DatabaseService', 'Database tables created');
   }
 
+  // ==================== 文件夹 CRUD ====================
+
+  /**
+   * 创建文件夹
+   */
+  async insertFolder(folder: Omit<Folder, 'id'>): Promise<number> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const valueBucket: relationalStore.ValuesBucket = {
+      name: folder.name,
+      icon: folder.icon || '',
+      created_at: folder.createdAt,
+      updated_at: folder.updatedAt
+    };
+
+    try {
+      const rowId = await this.store.insert('folder', valueBucket);
+      Logger.info('DatabaseService', `Folder created with id: ${rowId}`);
+      return rowId as number;
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to insert folder', error as Error);
+      throw new Error(`创建文件夹失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 查询所有文件夹
+   */
+  async getAllFolders(): Promise<Folder[]> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('folder');
+    predicates.orderByAsc('name');
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      const folders: Folder[] = [];
+
+      while (resultSet.goToNextRow()) {
+        folders.push(this.parseFolderFromResultSet(resultSet));
+      }
+
+      resultSet.close();
+      return folders;
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to get all folders', error as Error);
+      throw new Error(`查询文件夹列表失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 按 ID 查询文件夹
+   */
+  async getFolderById(id: number): Promise<Folder | null> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('folder');
+    predicates.equalTo('id', id);
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      if (resultSet.goToFirstRow()) {
+        const folder = this.parseFolderFromResultSet(resultSet);
+        resultSet.close();
+        return folder;
+      }
+      resultSet.close();
+      return null;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to get folder ${id}`, error as Error);
+      throw new Error(`查询文件夹失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 更新文件夹
+   */
+  async updateFolder(id: number, updates: Partial<Omit<Folder, 'id' | 'createdAt'>>): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const valueBucket: relationalStore.ValuesBucket = {};
+    if (updates.name !== undefined) valueBucket.name = updates.name;
+    if (updates.icon !== undefined) valueBucket.icon = updates.icon;
+    valueBucket.updated_at = Date.now();
+
+    const predicates = new relationalStore.RdbPredicates('folder');
+    predicates.equalTo('id', id);
+
+    try {
+      await this.store.update(valueBucket, predicates);
+      Logger.info('DatabaseService', `Folder ${id} updated`);
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to update folder ${id}`, error as Error);
+      throw new Error(`更新文件夹失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 删除文件夹
+   * 注意：不会删除宏，只是将宏的 folder_id 设置为 null
+   */
+  async deleteFolder(id: number): Promise<void> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('folder');
+    predicates.equalTo('id', id);
+
+    try {
+      await this.store.delete(predicates);
+      Logger.info('DatabaseService', `Folder ${id} deleted`);
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to delete folder ${id}`, error as Error);
+      throw new Error(`删除文件夹失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 查询文件夹下的宏
+   */
+  async getMacrosByFolderId(folderId: number): Promise<Macro[]> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('macro');
+    predicates.equalTo('folder_id', folderId);
+    predicates.orderByDesc('updated_at');
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      const macros: Macro[] = [];
+
+      while (resultSet.goToNextRow()) {
+        macros.push(this.parseMacroFromResultSet(resultSet));
+      }
+
+      resultSet.close();
+      return macros;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to get macros for folder ${folderId}`, error as Error);
+      throw new Error(`查询文件夹宏失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 查询未分类的宏
+   */
+  async getUnassignedMacros(): Promise<Macro[]> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('macro');
+    predicates.isNull('folder_id');
+    predicates.orderByDesc('updated_at');
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      const macros: Macro[] = [];
+
+      while (resultSet.goToNextRow()) {
+        macros.push(this.parseMacroFromResultSet(resultSet));
+      }
+
+      resultSet.close();
+      return macros;
+    } catch (error) {
+      Logger.error('DatabaseService', 'Failed to get unassigned macros', error as Error);
+      throw new Error(`查询未分类宏失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取文件夹宏数量
+   */
+  async getFolderMacroCount(folderId: number): Promise<number> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const predicates = new relationalStore.RdbPredicates('macro');
+    if (folderId === -1) {
+      predicates.isNull('folder_id');
+    } else if (folderId === 0) {
+    } else {
+      predicates.equalTo('folder_id', folderId);
+    }
+
+    try {
+      const resultSet = await this.store.query(predicates);
+      let count = 0;
+      while (resultSet.goToNextRow()) {
+        count++;
+      }
+      resultSet.close();
+      return count;
+    } catch (error) {
+      Logger.error('DatabaseService', `Failed to count macros for folder ${folderId}`, error as Error);
+      throw new Error(`统计文件夹宏数量失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取所有文件夹的宏数量（key=folderId, value=count）
+   */
+  async getAllFoldersMacroCount(): Promise<Map<number, number>> {
+    if (!this.store) throw new Error('Database not initialized');
+
+    const countMap = new Map<number, number>();
+
+    const countFolderMacros = async (folderId: number) => {
+      try {
+        const count = await this.getFolderMacroCount(folderId);
+        countMap.set(folderId, count);
+      } catch (error) {
+        Logger.error('DatabaseService', `Failed to count macros for folder ${folderId}`, error as Error);
+        countMap.set(folderId, 0);
+      }
+    };
+
+    await countFolderMacros(0);
+    await countFolderMacros(-1);
+    const folders = await this.getAllFolders();
+    for (const folder of folders) {
+      await countFolderMacros(folder.id);
+    }
+
+    return countMap;
+  }
+
   // ==================== 宏 CRUD ====================
 
   /**
@@ -279,6 +521,7 @@ export class DatabaseService {
       description: macro.description || '',
       icon: macro.icon || '',
       enabled: macro.enabled ? 1 : 0,
+      folder_id: macro.folderId || null,
       created_at: macro.createdAt,
       updated_at: macro.updatedAt
     };
@@ -381,6 +624,7 @@ export class DatabaseService {
     if (updates.description !== undefined) valueBucket.description = updates.description;
     if (updates.icon !== undefined) valueBucket.icon = updates.icon;
     if (updates.enabled !== undefined) valueBucket.enabled = updates.enabled ? 1 : 0;
+    if (updates.folderId !== undefined) valueBucket.folder_id = updates.folderId || null;
     valueBucket.updated_at = Date.now();
 
     const predicates = new relationalStore.RdbPredicates('macro');
@@ -869,12 +1113,30 @@ export class DatabaseService {
    * 从 ResultSet 解析宏对象
    */
   private parseMacroFromResultSet(resultSet: relationalStore.ResultSet): Macro {
+    const folderIdIndex = resultSet.getColumnIndex('folder_id');
+    const folderIdValue = resultSet.getLong(folderIdIndex);
+    const folderId = folderIdValue !== 0 ? folderIdValue : undefined;
+
     return {
       id: resultSet.getLong(resultSet.getColumnIndex('id')),
       name: resultSet.getString(resultSet.getColumnIndex('name')),
       description: resultSet.getString(resultSet.getColumnIndex('description')) || undefined,
       icon: resultSet.getString(resultSet.getColumnIndex('icon')) || undefined,
       enabled: resultSet.getLong(resultSet.getColumnIndex('enabled')) === 1,
+      folderId: folderId,
+      createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at')),
+      updatedAt: resultSet.getLong(resultSet.getColumnIndex('updated_at'))
+    };
+  }
+
+  /**
+   * 从 ResultSet 解析文件夹对象
+   */
+  private parseFolderFromResultSet(resultSet: relationalStore.ResultSet): Folder {
+    return {
+      id: resultSet.getLong(resultSet.getColumnIndex('id')),
+      name: resultSet.getString(resultSet.getColumnIndex('name')),
+      icon: resultSet.getString(resultSet.getColumnIndex('icon')) || undefined,
       createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at')),
       updatedAt: resultSet.getLong(resultSet.getColumnIndex('updated_at'))
     };

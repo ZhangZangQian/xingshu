@@ -9,6 +9,7 @@ export class ActionTypes {
   static readonly CLIPBOARD_WRITE = 'clipboard_write';
   static readonly OPEN_URL = 'open_url';
   static readonly TEXT_PROCESS = 'text_process';
+  static readonly JSON_PROCESS = 'json_process';
   static readonly USER_DIALOG = 'user_dialog';
   static readonly SET_VARIABLE = 'set_variable';
   static readonly IF_ELSE = 'if_else';
@@ -25,6 +26,7 @@ export class ActionTypes {
       ActionTypes.CLIPBOARD_WRITE,
       ActionTypes.OPEN_URL,
       ActionTypes.TEXT_PROCESS,
+      ActionTypes.JSON_PROCESS,
       ActionTypes.USER_DIALOG,
       ActionTypes.SET_VARIABLE,
       ActionTypes.IF_ELSE
@@ -50,6 +52,8 @@ export class ActionTypes {
         return '打开 URL';
       case ActionTypes.TEXT_PROCESS:
         return '文本处理';
+      case ActionTypes.JSON_PROCESS:
+        return 'JSON 处理';
       case ActionTypes.USER_DIALOG:
         return '用户交互对话框';
       case ActionTypes.SET_VARIABLE:

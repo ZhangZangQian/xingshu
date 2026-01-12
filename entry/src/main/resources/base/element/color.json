@@ -9,20 +9,76 @@
       "value": "#007DFF"
     },
     {
-      "name": "background_color",
-      "value": "#F1F3F5"
+      "name": "primary_blue",
+      "value": "#007DFF"
+    },
+    {
+      "name": "primary_blue_light",
+      "value": "#E3F2FF"
+    },
+    {
+      "name": "primary_blue_dark",
+      "value": "#0056CC"
     },
     {
       "name": "text_primary",
-      "value": "#182431"
+      "value": "#1A1A1A"
     },
     {
       "name": "text_secondary",
-      "value": "#99182431"
+      "value": "#6E6E73"
+    },
+    {
+      "name": "text_tertiary",
+      "value": "#AEAEB2"
+    },
+    {
+      "name": "bg_primary",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "bg_secondary",
+      "value": "#F2F2F7"
+    },
+    {
+      "name": "bg_tertiary",
+      "value": "#E5E5EA"
+    },
+    {
+      "name": "background_color",
+      "value": "#F2F2F7"
+    },
+    {
+      "name": "shadow_light",
+      "value": "#14000000"
+    },
+    {
+      "name": "shadow_medium",
+      "value": "#30000000"
+    },
+    {
+      "name": "shadow_dark",
+      "value": "#29000000"
+    },
+    {
+      "name": "success",
+      "value": "#34C759"
+    },
+    {
+      "name": "warning",
+      "value": "#FF9500"
+    },
+    {
+      "name": "danger",
+      "value": "#FF3B30"
+    },
+    {
+      "name": "info",
+      "value": "#5AC8FA"
     },
     {
       "name": "divider_color",
-      "value": "#0A182431"
+      "value": "#E5E5EA"
     }
   ]
 }

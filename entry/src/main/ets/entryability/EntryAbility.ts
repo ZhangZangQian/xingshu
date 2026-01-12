@@ -44,6 +44,8 @@ export default class EntryAbility extends UIAbility {
   async onWindowStageCreate(windowStage: window.WindowStage) {
     hilog.info(0x0000, 'EntryAbility', '%{public}s', 'Ability onWindowStageCreate');
 
+    AppStorage.setOrCreate('windowStage', windowStage);
+
     // 先初始化应用
     await this.initializeApp();
 

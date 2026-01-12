@@ -1,4 +1,15 @@
 /**
+ * 文件夹数据模型
+ */
+export interface Folder {
+  id: number;                      // 主键（自增）
+  name: string;                    // 文件夹名称（1-30 字符）
+  icon?: string;                   // 图标（可选）
+  createdAt: number;               // 创建时间戳（毫秒）
+  updatedAt: number;               // 更新时间戳（毫秒）
+}
+
+/**
  * 宏定义数据模型
  */
 export interface Macro {
@@ -7,6 +18,7 @@ export interface Macro {
   description?: string;            // 宏描述
   icon?: string;                   // 图标名称或路径
   enabled: boolean;                // 是否启用
+  folderId?: number;               // 所属文件夹 ID（null 表示未分类）
   createdAt: number;               // 创建时间戳（毫秒）
   updatedAt: number;               // 更新时间戳（毫秒）
 
@@ -14,6 +26,7 @@ export interface Macro {
   triggers?: Trigger[];            // 触发器列表
   actions?: Action[];              // 动作列表
   conditions?: Condition[];        // 条件列表
+  folder?: Folder;                 // 所属文件夹（运行时填充）
 }
 
 /**
@@ -24,6 +37,7 @@ export interface MacroInput {
   description?: string;
   icon?: string;
   enabled: boolean;
+  folderId?: number;              // 所属文件夹 ID（可选）
   createdAt: number;
   updatedAt: number;
 }

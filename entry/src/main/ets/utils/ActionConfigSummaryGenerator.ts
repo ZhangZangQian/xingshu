@@ -1,4 +1,5 @@
 import { Action, ActionType } from '../models/Macro';
+import { TextSegment } from '../models/ActionViewModel';
 
 /**
  * 动作配置摘要生成器
@@ -53,6 +54,51 @@ export class ActionConfigSummaryGenerator {
       }
     } catch (error) {
       return '配置格式错误';
+    }
+  }
+
+  /**
+   * 生成结构化配置摘要（用于渲染可点击内容）
+   * @param action 动作
+   * @returns 文本段数组
+   */
+  static generateSegments(action: Action): TextSegment[] {
+    try {
+      const config = JSON.parse(action.config);
+
+      switch (action.type) {
+        case ActionType.SET_VARIABLE:
+          return this.generateSetVariableSegments(config);
+
+        case ActionType.CLIPBOARD_READ:
+          return this.generateClipboardReadSegments(config);
+
+        case ActionType.TEXT_PROCESS:
+          return this.generateTextProcessSegments(config);
+
+        case ActionType.HTTP_REQUEST:
+          return this.generateHttpRequestSegments(config);
+
+        case ActionType.USER_DIALOG:
+          return this.generateUserDialogSegments(config);
+
+        case ActionType.OPEN_URL:
+          return this.generateOpenUrlSegments(config);
+
+        case ActionType.NOTIFICATION:
+          return this.generateNotificationSegments(config);
+
+        case ActionType.LAUNCH_APP:
+          return this.generateLaunchAppSegments(config);
+
+        case ActionType.JSON_PROCESS:
+          return this.generateJsonProcessSegments(config);
+
+        default:
+          return [{ text: this.generate(action), isClickable: false }];
+      }
+    } catch (error) {
+      return [{ text: '配置格式错误', isClickable: false }];
     }
   }
 
@@ -225,6 +271,225 @@ export class ActionConfigSummaryGenerator {
       return text;
     }
     return text.substring(0, maxLength) + '...';
+  }
+
+  /**
+   * 生成设置变量结构化摘要
+   */
+  private static generateSetVariableSegments(config: any): TextSegment[] {
+    const variableName = config.variableName || '变量名称';
+    const value = config.value !== undefined && config.value !== '' ? this.truncateText(String(config.value), 40) : '输入';
+
+    return [
+      { text: '将 ', isClickable: false },
+      { text: variableName, isClickable: true, color: '#007AFF', value: config.variableName || '', field: 'variableName' },
+      { text: ' 设为 ', isClickable: false },
+      { text: value, isClickable: true, color: '#5856D6', backgroundColor: '#F2F2F7', value: config.value !== undefined ? String(config.value) : '', field: 'value' }
+    ];
+  }
+
+  /**
+   * 生成读取剪贴板结构化摘要
+   */
+  private static generateClipboardReadSegments(config: any): TextSegment[] {
+    return [{ text: 'clipboard', isClickable: false }];
+  }
+
+  /**
+   * 生成文本处理结构化摘要
+   */
+  private static generateTextProcessSegments(config: any): TextSegment[] {
+    const operationSymbols: Record<string, string> = {
+      'regex_extract': 'extract',
+      'replace': 'replace',
+      'split': 'split',
+      'uppercase': 'uppercase',
+      'lowercase': 'lowercase',
+      'url_encode': 'url_encode',
+      'url_decode': 'url_decode'
+    };
+
+    const op = operationSymbols[config.operation] || config.operation;
+    const input = config.input ? this.truncateText(config.input, 25) : '(未设置)';
+
+    const segments: TextSegment[] = [
+      { text: op, isClickable: false, color: '#FF9500' },
+      { text: '(', isClickable: false }
+    ];
+
+    if (config.input && this.isVariableReference(input)) {
+      segments.push({ text: input, isClickable: true, color: '#007AFF', backgroundColor: '#EBF5FF', value: this.extractVariableName(input) });
+    } else {
+      segments.push({ text: input, isClickable: false });
+    }
+
+    if (config.operation === 'regex_extract') {
+      const pattern = config.pattern ? this.truncateText(config.pattern, 20) : '(未设置)';
+      segments.push({ text: `, /${pattern}/`, isClickable: false });
+    } else if (config.operation === 'replace') {
+      segments.push({ text: `, ${this.truncateText(config.searchValue || '', 15)}`, isClickable: false });
+    }
+
+    segments.push({ text: ')', isClickable: false });
+
+    return segments;
+  }
+
+  /**
+   * 生成 HTTP 请求结构化摘要
+   */
+  private static generateHttpRequestSegments(config: any): TextSegment[] {
+    const method = config.method || 'GET';
+    const url = config.url ? this.truncateText(config.url, 40) : '(未设置)';
+
+    const segments: TextSegment[] = [
+      { text: method, isClickable: false, color: '#34C759' },
+      { text: ' ', isClickable: false }
+    ];
+
+    if (config.url && this.isVariableReference(config.url)) {
+      segments.push({ text: url, isClickable: true, color: '#007AFF', backgroundColor: '#EBF5FF', value: this.extractVariableName(config.url) });
+    } else {
+      segments.push({ text: url, isClickable: false });
+    }
+
+    return segments;
+  }
+
+  /**
+   * 生成用户对话框结构化摘要
+   */
+  private static generateUserDialogSegments(config: any): TextSegment[] {
+    const typeSymbols: Record<string, string> = {
+      'confirm': 'confirm',
+      'single_select': 'select',
+      'multi_select': 'multiSelect',
+      'text_input': 'input'
+    };
+
+    const type = typeSymbols[config.type] || config.type;
+    const title = config.title ? this.truncateText(config.title, 20) : '(未设置)';
+
+    const segments: TextSegment[] = [
+      { text: type, isClickable: false, color: '#AF52DE' },
+      { text: '(', isClickable: false },
+      { text: `"${title}"`, isClickable: false }
+    ];
+
+    if (config.type === 'single_select' || config.type === 'multi_select') {
+      const optionCount = config.options ? config.options.length : 0;
+      segments.push({ text: `, ${optionCount} 选项`, isClickable: false });
+    }
+
+    segments.push({ text: ')', isClickable: false });
+
+    return segments;
+  }
+
+  /**
+   * 生成打开 URL 结构化摘要
+   */
+  private static generateOpenUrlSegments(config: any): TextSegment[] {
+    const url = config.url ? this.truncateText(config.url, 40) : '(未设置)';
+
+    const segments: TextSegment[] = [
+      { text: 'open', isClickable: false, color: '#34C759' },
+      { text: '(', isClickable: false }
+    ];
+
+    if (config.url && this.isVariableReference(config.url)) {
+      segments.push({ text: url, isClickable: true, color: '#007AFF', backgroundColor: '#EBF5FF', value: this.extractVariableName(config.url) });
+    } else {
+      segments.push({ text: `"${url}"`, isClickable: false });
+    }
+
+    segments.push({ text: ')', isClickable: false });
+
+    return segments;
+  }
+
+  /**
+   * 生成发送通知结构化摘要
+   */
+  private static generateNotificationSegments(config: any): TextSegment[] {
+    const title = config.title ? this.truncateText(config.title, 20) : '(未设置)';
+
+    const segments: TextSegment[] = [
+      { text: 'notify', isClickable: false, color: '#FF9500' },
+      { text: '(', isClickable: false },
+      { text: `"${title}"`, isClickable: false },
+      { text: ')', isClickable: false }
+    ];
+
+    return segments;
+  }
+
+  /**
+   * 生成启动应用结构化摘要
+   */
+  private static generateLaunchAppSegments(config: any): TextSegment[] {
+    const bundleName = config.bundleName ? this.truncateText(config.bundleName, 30) : '(未设置)';
+    return [
+      { text: 'launch', isClickable: false, color: '#007AFF' },
+      { text: '(', isClickable: false },
+      { text: `"${bundleName}"`, isClickable: false },
+      { text: ')', isClickable: false }
+    ];
+  }
+
+  /**
+   * 生成 JSON 处理结构化摘要
+   */
+  private static generateJsonProcessSegments(config: any): TextSegment[] {
+    const operationSymbols: Record<string, string> = {
+      'json_query': 'json',
+      'json_filter': 'json_filter',
+      'json_map': 'json_map',
+      'json_merge': 'json_merge',
+      'array_length': 'len',
+      'array_get': 'get',
+      'array_set': 'set',
+      'json_encode': 'to_json',
+      'json_decode': 'from_json'
+    };
+
+    const op = operationSymbols[config.operation] || config.operation;
+    const input = config.input ? this.truncateText(config.input, 30) : '(未设置)';
+
+    const segments: TextSegment[] = [
+      { text: op, isClickable: false, color: '#FF9500' },
+      { text: '(', isClickable: false }
+    ];
+
+    if (config.input && this.isVariableReference(config.input)) {
+      segments.push({ text: input, isClickable: true, color: '#007AFF', backgroundColor: '#EBF5FF', value: this.extractVariableName(config.input) });
+    } else {
+      segments.push({ text: input, isClickable: false });
+    }
+
+    if (config.operation === 'json_query') {
+      const path = config.queryPath ? this.truncateText(config.queryPath, 25) : '(未设置)';
+      segments.push({ text: `, "${path}"`, isClickable: false });
+    }
+
+    segments.push({ text: ')', isClickable: false });
+
+    return segments;
+  }
+
+  /**
+   * 判断是否是变量引用
+   */
+  private static isVariableReference(text: string): boolean {
+    return /^\{[a-zA-Z_][a-zA-Z0-9_]*\}$/.test(text.trim());
+  }
+
+  /**
+   * 从变量引用中提取变量名
+   */
+  private static extractVariableName(text: string): string {
+    const match = text.match(/^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
+    return match ? match[1] : text;
   }
 
   /**
