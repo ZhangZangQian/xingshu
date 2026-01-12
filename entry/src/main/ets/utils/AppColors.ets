@@ -1,0 +1,30 @@
+export class AppColors {
+  static readonly start_window_background = $r('app.color.start_window_background');
+  static readonly app_background = $r('app.color.app_background');
+  static readonly page_background = $r('app.color.page_background');
+  static readonly card_background = $r('app.color.card_background');
+  static readonly text_primary = $r('app.color.text_primary');
+  static readonly text_secondary = $r('app.color.text_secondary');
+  static readonly text_tertiary = $r('app.color.text_tertiary');
+  static readonly text_inverse = $r('app.color.text_inverse');
+  static readonly text_link = $r('app.color.text_link');
+  static readonly primary = $r('app.color.primary');
+  static readonly primary_light = $r('app.color.primary_light');
+  static readonly primary_faint = $r('app.color.primary_faint');
+  static readonly accent_blue = $r('app.color.accent_blue');
+  static readonly accent_orange = $r('app.color.accent_orange');
+  static readonly accent_green = $r('app.color.accent_green');
+  static readonly accent_purple = $r('app.color.accent_purple');
+  static readonly accent_pink = $r('app.color.accent_pink');
+  static readonly border_default = $r('app.color.border_default');
+  static readonly border_light = $r('app.color.border_light');
+  static readonly border_subtle = $r('app.color.border_subtle');
+  static readonly shadow_default = $r('app.color.shadow_default');
+  static readonly shadow_light = $r('app.color.shadow_light');
+  static readonly shadow_heavy = $r('app.color.shadow_heavy');
+  static readonly input_background = $r('app.color.input_background');
+  static readonly button_background = $r('app.color.button_background');
+  static readonly divider_default = $r('app.color.divider_default');
+  static readonly overlay_background = $r('app.color.overlay_background');
+  static readonly overlay_bottom = $r('app.color.overlay_bottom');
+}

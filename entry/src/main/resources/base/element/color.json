@@ -1,0 +1,116 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "app_background",
+      "value": "#F5F6F8"
+    },
+    {
+      "name": "page_background",
+      "value": "#F2F2F7"
+    },
+    {
+      "name": "card_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "text_primary",
+      "value": "#111827"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#6B7280"
+    },
+    {
+      "name": "text_tertiary",
+      "value": "#9CA3AF"
+    },
+    {
+      "name": "text_inverse",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "text_link",
+      "value": "#007AFF"
+    },
+    {
+      "name": "primary",
+      "value": "#607AFB"
+    },
+    {
+      "name": "primary_light",
+      "value": "#26607AFB"
+    },
+    {
+      "name": "primary_faint",
+      "value": "#19607AFB"
+    },
+    {
+      "name": "accent_blue",
+      "value": "#007AFF"
+    },
+    {
+      "name": "accent_orange",
+      "value": "#FF9500"
+    },
+    {
+      "name": "accent_green",
+      "value": "#22C55E"
+    },
+    {
+      "name": "accent_purple",
+      "value": "#A855F7"
+    },
+    {
+      "name": "accent_pink",
+      "value": "#EC4899"
+    },
+    {
+      "name": "border_default",
+      "value": "#E5E5EA"
+    },
+    {
+      "name": "border_light",
+      "value": "#F3F4F6"
+    },
+    {
+      "name": "border_subtle",
+      "value": "#0F000000"
+    },
+    {
+      "name": "shadow_default",
+      "value": "#0D000000"
+    },
+    {
+      "name": "shadow_light",
+      "value": "#0A000000"
+    },
+    {
+      "name": "shadow_heavy",
+      "value": "#14000000"
+    },
+    {
+      "name": "input_background",
+      "value": "#E5E7EB"
+    },
+    {
+      "name": "button_background",
+      "value": "#F3F4F6"
+    },
+    {
+      "name": "divider_default",
+      "value": "#E5E5EA"
+    },
+    {
+      "name": "overlay_background",
+      "value": "#CCFFFFFF"
+    },
+    {
+      "name": "overlay_bottom",
+      "value": "#F2FFFFFF"
+    }
+  ]
+}
