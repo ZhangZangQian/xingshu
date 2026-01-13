@@ -19,9 +19,8 @@ interface ActionItem {
 struct MacroEditor {
   @State shortcutId: string = ''; // 空字符串表示新建模式
   @State title: string = 'Untitled Shortcut';
-  @State actions: ActionItem[] = [];
-  @State triggerCount: number = 0;
-  @State actionCount: number = 0;
+  @State trigger: ActionItem | null = null; // 单个触发器
+  @State actions: ActionItem[] = []; // 动作列表
   @State canUndo: boolean = false;
   @State canRedo: boolean = false;
   @State canPlay: boolean = false;
@@ -33,12 +32,13 @@ struct MacroEditor {
   private dataManager: WorkflowDataManager = WorkflowDataManager.getInstance();
 
   aboutToAppear() {
+    //TODO 找到最新的跳转方案
     const params = router.getParams() as Record<string, Object>;
     if (params) {
       // 接收 trigger 参数（从 TriggerLibrary 选择后返回）
       if (params['trigger']) {
         const triggerData = params['trigger'] as Record<string, Object>;
-        const triggerItem: ActionItem = {
+        this.trigger = {
           id: triggerData['id'] as string,
           type: triggerData['type'] as 'trigger',
           title: triggerData['title'] as string,
@@ -46,9 +46,11 @@ struct MacroEditor {
           iconColor: triggerData['iconColor'] as string,
           description: triggerData['description'] as string
         };
-        this.actions = [triggerItem];
+        // 恢复已有 actions
+        // if (params['existingActions']) {
+        //   this.actions = params['existingActions'] as ActionItem[];
+        // }
         this.isCreateMode = false;
-        this.updateCounts();
       }
       // 接收 action 参数（从 ActionLibrary 选择后返回）
       else if (params['action']) {
@@ -61,22 +63,30 @@ struct MacroEditor {
           iconColor: actionData['iconColor'] as string,
           description: actionData['description'] as string
         };
+        // 恢复已有 trigger
+        // if (params['existingTrigger']) {
+        //   this.trigger = params['existingTrigger'] as ActionItem;
+        // }
+        // 恢复已有 actions
+        if (params['existingActions']) {
+          this.actions = [...params['existingActions'] as ActionItem[]];
+        }
+        // 追加新 action
         this.actions.push(actionItem);
         this.isCreateMode = false;
-        this.updateCounts();
       }
       // 接收 shortcut_id 判断模式
       else if (params['shortcut_id']) {
         this.shortcutId = params['shortcut_id'] as string;
         this.isCreateMode = false;
         this.loadWorkflowFromManager();
-      } else {
-        this.isCreateMode = true;
       }
       // 兼容 title 参数
       if (params['title']) {
         this.title = params['title'] as string;
       }
+
+      this.updateCounts();
     } else {
       // 没有参数，默认为新建模式
       this.isCreateMode = true;
@@ -92,7 +102,10 @@ struct MacroEditor {
         this.icon = workflow.icon;
         this.iconColor = workflow.iconColor;
         this.isEnabled = workflow.isEnabled;
-        this.actions = this.convertWorkflowNodesToActionItems(workflow.nodes);
+        // 分离 trigger 和 actions
+        const allItems = this.convertWorkflowNodesToActionItems(workflow.nodes);
+        this.trigger = allItems.find(item => item.type === 'trigger') || null;
+        this.actions = allItems.filter(item => item.type !== 'trigger');
         this.updateCounts();
       }
     } catch (error) {
@@ -140,15 +153,15 @@ struct MacroEditor {
 
   // 加载编辑模式的 mock 数据
   loadMockData() {
+    this.trigger = {
+      id: '1',
+      type: 'trigger',
+      title: 'At 7:00 AM Daily',
+      icon: '\u23F0',
+      iconColor: '#FF9500',
+      description: 'When'
+    };
     this.actions = [
-      {
-        id: '1',
-        type: 'trigger',
-        title: 'At 7:00 AM Daily',
-        icon: '\u23F0',
-        iconColor: '#FF9500',
-        description: 'When'
-      },
       {
         id: '2',
         type: 'action',
@@ -191,51 +204,35 @@ struct MacroEditor {
 
   // 更新计数器
   updateCounts() {
-    this.triggerCount = this.actions.filter(item => item.type === 'trigger').length;
-    this.actionCount = this.actions.filter(
-      item => item.type === 'action' || item.type === 'condition' || item.type === 'nested'
-    ).length;
-    this.canPlay = this.triggerCount > 0 && this.actionCount > 0;
-  }
-
-  // 获取需要显示的 Actions（根据是否有 Trigger）
-  getDisplayActions(allActionsMode: boolean): ActionItem[] {
-    if (allActionsMode) {
-      return this.actions;
-    } else {
-      return this.actions.filter(item => item.type !== 'trigger');
-    }
-  }
-
-  // 获取 Trigger 索引
-  getTriggerIndex(): number {
-    for (let i = 0; i < this.actions.length; i++) {
-      if (this.actions[i].type === 'trigger') {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  // 判断是否显示连接线
-  shouldShowConnector(index: number): boolean {
-    const hasTrigger = this.hasTrigger();
-    if (!hasTrigger) {
-      return false;
-    }
-    const displayActions = this.actions.filter(a => a.type !== 'trigger');
-    return index < displayActions.length - 1;
+    this.canPlay = this.trigger !== null && this.actions.length > 0;
   }
 
   // 判断是否有 Trigger
   hasTrigger(): boolean {
-    return this.actions.some(item => item.type === 'trigger');
+    return this.trigger !== null;
+  }
+
+
+
+  // 判断是否显示连接线
+  shouldShowConnector(index: number): boolean {
+    if (!this.hasTrigger()) {
+      return false;
+    }
+    return index < this.actions.length - 1;
   }
 
   // 保存工作流
   async saveWorkflow() {
     try {
-      const nodes = this.convertActionItemsToWorkflowNodes(this.actions);
+      // 合并 trigger 和 actions
+      const allItems: ActionItem[] = [];
+      if (this.trigger) {
+        allItems.push(this.trigger);
+      }
+      allItems.push(...this.actions);
+
+      const nodes = this.convertActionItemsToWorkflowNodes(allItems);
 
       const workflow: Workflow = {
         id: this.shortcutId || Date.now().toString(),
@@ -245,8 +242,8 @@ struct MacroEditor {
         createdAt: this.isCreateMode ? Date.now() : 0,
         updatedAt: Date.now(),
         isEnabled: this.isEnabled,
-        triggerCount: this.triggerCount,
-        actionCount: this.actionCount,
+        triggerCount: this.trigger ? 1 : 0,
+        actionCount: this.actions.length,
         nodes: nodes
       };
 
@@ -385,13 +382,30 @@ struct MacroEditor {
           // 编辑模式：显示已有的触发器和动作列表
           if (this.hasTrigger()) {
             // 有 Trigger：先显示 Trigger，再显示其他动作
-            this.TriggerSection(this.actions[0])
+            this.TriggerSection(this.trigger!)
 
-            if (this.actions.length > 1) {
+            if (this.actions.length > 0) {
               this.ActionsSection()
             }
           } else {
-            // 没有 Trigger：直接显示所有动作
+            // 没有 Trigger：显示 Add Trigger 按钮
+            Column() {
+              Row() {
+                Text('Trigger')
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor('#9CA3AF')
+                  .letterSpacing(0.5)
+              }
+              .width('100%')
+              .margin({ bottom: 8 })
+
+              this.AddTriggerButton()
+            }
+            .width('100%')
+            .margin({ bottom: 20 })
+
+            // 如果已有 actions，也显示它们
             if (this.actions.length > 0) {
               this.ActionsSection()
             }
@@ -440,7 +454,13 @@ struct MacroEditor {
     .height(64)
     .padding({ left: 16, right: 16 })
     .onClick(() => {
-      router.pushUrl({ url: 'pages/TriggerLibrary' });
+      //TODO 替换最新的
+      router.pushUrl({
+        url: 'pages/TriggerLibrary',
+        params: {
+          existingActions: this.actions
+        }
+      });
     })
   }
 
@@ -504,7 +524,13 @@ struct MacroEditor {
       .width(260)
       .height(64)
       .onClick(() => {
-        router.pushUrl({ url: 'pages/ActionLibrary' });
+        router.pushUrl({
+          url: 'pages/ActionLibrary',
+          params: {
+            existingActions: this.actions,
+            existingTrigger: this.trigger
+          }
+        });
       })
     }
     .width('100%')
@@ -560,8 +586,7 @@ struct MacroEditor {
 
       Column({ space: 12 }) {
         ForEach(this.actions, (item: ActionItem, index: number) => {
-          if (item.type === 'trigger') {
-          } else if (item.type === 'condition') {
+          if (item.type === 'condition') {
             this.ConditionBlock(item, index)
           } else {
             this.ActionItemWithConnector(item, index)
@@ -586,38 +611,6 @@ struct MacroEditor {
       }
 
       this.ActionCard(item, index)
-    }
-    .width('100%')
-  }
-      .width('100%')
-      .margin({ bottom: 8, top: 8 })
-
-      Column({ space: 12 }) {
-        ForEach(this.actions, (item: ActionItem, index: number) => {
-          if (item.type === 'trigger') {
-          } else if (item.type === 'condition') {
-            this.ConditionBlock(item, index)
-          } else {
-            Stack() {
-              // 有 Trigger 时，非最后一个 action 显示连接线
-              const hasTrigger = this.actions.some(a => a.type === 'trigger');
-              const displayActions = hasTrigger ? this.actions.filter(a => a.type !== 'trigger') : this.actions;
-              if (hasTrigger && index < displayActions.length - 1) {
-                Row()
-                  .width(2)
-                  .height('100%')
-                  .backgroundColor('#D1D5DB')
-                  .position({ x: 36, y: 0 })
-                  .zIndex(-1)
-              }
-
-              this.ActionCard(item, index)
-            }
-            .width('100%')
-          }
-        })
-      }
-      .width('100%')
     }
     .width('100%')
   }
@@ -1072,9 +1065,15 @@ struct MacroEditor {
     .border({ width: 1, color: '#D1D5DB' })
     .shadow({ radius: 4, color: 'rgba(0, 0, 0, 0.05)', offsetY: 2 })
     .margin({ top: 12, bottom: 12 })
-    .onClick(() => {
-      router.pushUrl({ url: 'pages/ActionLibrary' });
-    })
+      .onClick(() => {
+        router.pushUrl({
+          url: 'pages/ActionLibrary',
+          params: {
+            existingActions: this.actions,
+            existingTrigger: this.trigger
+          }
+        });
+      })
   }
 
   @Builder
@@ -1083,7 +1082,7 @@ struct MacroEditor {
       Row() {
         if (this.isCreateMode) {
           // 新建模式：动态的统计和状态控制
-          Text(`${this.triggerCount} TRIGGERS • ${this.actionCount} ACTIONS`)
+          Text(`${this.trigger ? 1 : 0} TRIGGERS • ${this.actions.length} ACTIONS`)
             .fontSize(11)
             .fontWeight(FontWeight.Bold)
             .fontColor('#9CA3AF')
@@ -1137,7 +1136,7 @@ struct MacroEditor {
           } : undefined)
         } else {
           // 编辑模式：固定显示
-          Text(`${this.triggerCount} Trigger \u2022 ${this.actionCount} Actions`)
+          Text(`${this.trigger ? 1 : 0} Trigger \u2022 ${this.actions.length} Actions`)
             .fontSize(11)
             .fontWeight(FontWeight.Bold)
             .fontColor('#6B7280')

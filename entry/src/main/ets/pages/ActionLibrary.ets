@@ -30,6 +30,8 @@ interface SuggestedAction {
 struct ActionLibrary {
   @State searchValue: string = '';
   @State selectedTab: string = 'actions'; // 'actions' or 'logic'
+  @State existingActions: ActionItem[] = [];
+  @State existingTrigger: ActionItem | null = null;
 
   @State featuredWorkflows: FeaturedWorkflow[] = [
     {
@@ -102,11 +104,18 @@ struct ActionLibrary {
   @State groupedLogic: Record<string, LogicNode[]> = {};
 
   aboutToAppear(): void {
+    const params = router.getParams() as Record<string, Object>;
+    if (params && params['existingActions']) {
+      this.existingActions = params['existingActions'] as ActionItem[];
+    }
+    if (params && params['existingTrigger']) {
+      this.existingTrigger = params['existingTrigger'] as ActionItem;
+    }
     this.updateFilteredData();
   }
 
   addActionToEditor(id: number, title: string, description: string, icon: string, iconColor: string, type: 'action' | 'condition' | 'nested') {
-    router.replaceUrl({
+    router.pushUrl({
       url: 'pages/MacroEditor',
       params: {
         action: {
@@ -116,9 +125,11 @@ struct ActionLibrary {
           description: description,
           icon: icon,
           iconColor: iconColor
-        }
+        },
+        existingActions: this.existingActions,
+        existingTrigger: this.existingTrigger
       }
-    });
+    }, RouterMode.Single);
   }
 
   updateFilteredData(): void {

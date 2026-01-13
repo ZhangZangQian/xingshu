@@ -2,6 +2,16 @@ import router from '@ohos.router';
 import { TriggerItem } from '../models/WorkflowModels';
 import { TRIGGER_DATA, CATEGORY_LABELS, TriggerCategoryLabels } from '../data/WorkflowData';
 
+interface ActionItem {
+  id: string;
+  type: 'trigger' | 'action' | 'condition' | 'nested';
+  title: string;
+  icon: string;
+  iconColor: string;
+  description?: string;
+  children?: ActionItem[];
+}
+
 @Entry
 @Component
 struct TriggerList {
@@ -9,6 +19,8 @@ struct TriggerList {
   @State category: string = '';
   @State categoryLabel: string = '';
   @State filteredTriggers: TriggerItem[] = [];
+  @State existingActions: ActionItem[] = [];
+  @State existingTrigger: ActionItem | null = null;
 
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, Object>;
@@ -19,6 +31,14 @@ struct TriggerList {
 
     if (params && params['searchText']) {
       this.searchText = params['searchText'] as string;
+    }
+
+    if (params && params['existingActions']) {
+      this.existingActions = params['existingActions'] as ActionItem[];
+    }
+
+    if (params && params['existingTrigger']) {
+      this.existingTrigger = params['existingTrigger'] as ActionItem;
     }
 
     this.updateFilteredTriggers();
@@ -223,7 +243,7 @@ struct TriggerList {
     .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
     .margin({ bottom: 12 })
     .onClick(() => {
-      router.replaceUrl({
+      router.pushUrl({
         url: 'pages/MacroEditor',
         params: {
           trigger: {
@@ -233,9 +253,11 @@ struct TriggerList {
             icon: item.icon,
             iconColor: item.iconColor,
             description: 'When'
-          }
+          },
+          existingActions: this.existingActions,
+          existingTrigger: this.existingTrigger
         }
-      });
+      }, RouterMode.Single);
     })
   }
 }
