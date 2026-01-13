@@ -1,4 +1,6 @@
 import router from '@ohos.router';
+import { ActionItem, LogicNode } from '../models/WorkflowModels';
+import { ACTION_DATA, LOGIC_DATA, CATEGORY_LABELS, ActionCategoryLabels, LogicCategoryLabels } from '../data/WorkflowData';
 
 interface FeaturedWorkflow {
   title: string;
@@ -27,6 +29,8 @@ interface SuggestedAction {
 @Component
 struct ActionLibrary {
   @State searchValue: string = '';
+  @State selectedTab: string = 'actions'; // 'actions' or 'logic'
+
   @State featuredWorkflows: FeaturedWorkflow[] = [
     {
       title: 'Morning Briefing',
@@ -92,15 +96,94 @@ struct ActionLibrary {
     }
   ];
 
+  @State filteredActions: ActionItem[] = ACTION_DATA;
+  @State filteredLogic: LogicNode[] = LOGIC_DATA;
+  @State groupedActions: Record<string, ActionItem[]> = {};
+  @State groupedLogic: Record<string, LogicNode[]> = {};
+
+  aboutToAppear(): void {
+    this.updateFilteredData();
+  }
+
+  addActionToEditor(id: number, title: string, description: string, icon: string, iconColor: string, type: 'action' | 'condition' | 'nested') {
+    router.replaceUrl({
+      url: 'pages/MacroEditor',
+      params: {
+        action: {
+          id: id.toString(),
+          type: type,
+          title: title,
+          description: description,
+          icon: icon,
+          iconColor: iconColor
+        }
+      }
+    });
+  }
+
+  updateFilteredData(): void {
+    let filteredActions = ACTION_DATA;
+
+    if (this.searchValue) {
+      const lowerText = this.searchValue.toLowerCase();
+      filteredActions = filteredActions.filter(item =>
+        item.name.toLowerCase().includes(lowerText) ||
+        item.description.toLowerCase().includes(lowerText)
+      );
+    }
+
+    this.filteredActions = filteredActions;
+
+    const groupedActions: Record<string, ActionItem[]> = {};
+    filteredActions.forEach(action => {
+      const category = action.category;
+      if (!groupedActions[category]) {
+        groupedActions[category] = [];
+      }
+      groupedActions[category].push(action);
+    });
+
+    this.groupedActions = groupedActions;
+
+    let filteredLogic = LOGIC_DATA;
+
+    if (this.searchValue) {
+      const lowerText = this.searchValue.toLowerCase();
+      filteredLogic = filteredLogic.filter(item =>
+        item.name.toLowerCase().includes(lowerText) ||
+        item.description.toLowerCase().includes(lowerText)
+      );
+    }
+
+    this.filteredLogic = filteredLogic;
+
+    const groupedLogic: Record<string, LogicNode[]> = {};
+    filteredLogic.forEach(logicItem => {
+      const category: string = logicItem.category;
+      let list = groupedLogic[category];
+      if (!list) {
+        list = [];
+        groupedLogic[category] = list;
+      }
+      list.push(logicItem);
+    });
+
+    this.groupedLogic = groupedLogic;
+  }
+
   build() {
     Column() {
       this.Header()
+      this.TabBar()
       Scroll() {
         Column({ space: 32 }) {
           this.SearchBar()
-          this.FeaturedWorkflows()
-          this.Categories()
-          this.SuggestedActions()
+          if (this.selectedTab === 'actions') {
+            this.FeaturedWorkflows()
+            this.ActionsContent()
+          } else {
+            this.LogicContent()
+          }
         }
         .width('100%')
         .padding({ left: 24, right: 24, top: 24, bottom: 24 })
@@ -155,6 +238,43 @@ struct ActionLibrary {
   }
 
   @Builder
+  TabBar() {
+    Row({ space: 16 }) {
+      Button() {
+        Text('Actions')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.selectedTab === 'actions' ? '#607AFB' : '#6B7280')
+      }
+      .type(ButtonType.Normal)
+      .backgroundColor(this.selectedTab === 'actions' ? 'rgba(96, 122, 251, 0.1)' : 'transparent')
+      .borderRadius(999)
+      .padding({ left: 20, right: 20, top: 8, bottom: 8 })
+      .border({ width: this.selectedTab === 'actions' ? 1 : 0, color: 'rgba(96, 122, 251, 0.3)' })
+      .onClick(() => {
+        this.selectedTab = 'actions';
+      })
+
+      Button() {
+        Text('Logic')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.selectedTab === 'logic' ? '#607AFB' : '#6B7280')
+      }
+      .type(ButtonType.Normal)
+      .backgroundColor(this.selectedTab === 'logic' ? 'rgba(96, 122, 251, 0.1)' : 'transparent')
+      .borderRadius(999)
+      .padding({ left: 20, right: 20, top: 8, bottom: 8 })
+      .border({ width: this.selectedTab === 'logic' ? 1 : 0, color: 'rgba(96, 122, 251, 0.3)' })
+      .onClick(() => {
+        this.selectedTab = 'logic';
+      })
+    }
+    .width('100%')
+    .padding({ left: 24, right: 24, top: 12, bottom: 12 })
+  }
+
+  @Builder
   SearchBar() {
     Stack({ alignContent: Alignment.Center }) {
       Row() {
@@ -170,6 +290,7 @@ struct ActionLibrary {
           .borderRadius(12)
           .onChange((value: string) => {
             this.searchValue = value;
+            this.updateFilteredData();
           })
       }
       .width('100%')
@@ -282,6 +403,119 @@ struct ActionLibrary {
     })
   }
 
+  getCategoryLabel(category: string): string {
+    const actionLabels: ActionCategoryLabels = CATEGORY_LABELS.action as ActionCategoryLabels;
+    if (category === 'system_control') return actionLabels.system_control;
+    if (category === 'app_service') return actionLabels.app_service;
+    if (category === 'cross_device') return actionLabels.cross_device;
+    if (category === 'file_processing') return actionLabels.file_processing;
+    return category;
+  }
+
+  @Builder
+  ActionsContent() {
+    Column({ space: 16 }) {
+      Text('Actions')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1F2937')
+
+       ForEach(this.getActionCategories(), (category: string) => {
+         Column({ space: 16 }) {
+           Row() {
+             Text(this.getCategoryLabel(category))
+               .fontSize(16)
+               .fontWeight(FontWeight.Bold)
+               .fontColor('#6B7280')
+           }
+           .width('100%')
+
+           Column({ space: 12 }) {
+             ForEach(this.getCategoryActions(category), (item: ActionItem) => {
+               this.SuggestedActionCard({
+                 id: parseInt(item.id) || 0,
+                 title: item.name,
+                 description: item.description,
+                 icon: item.icon,
+                 iconColor: item.iconColor
+               })
+             })
+           }
+           .width('100%')
+         }
+         .width('100%')
+       })
+    }
+    .width('100%')
+  }
+
+  getLogicCategoryLabel(category: string): string {
+    const logicLabels: LogicCategoryLabels = CATEGORY_LABELS.logic as LogicCategoryLabels;
+    if (category === 'flow_control') return logicLabels.flow_control;
+    if (category === 'variable_data') return logicLabels.variable_data;
+    if (category === 'advanced') return logicLabels.advanced;
+    return category;
+  }
+
+  getCategoryActions(category: string): ActionItem[] {
+    if (!this.groupedActions) {
+      return [];
+    }
+    return this.groupedActions[category] || [];
+  }
+
+  getCategoryLogicNodes(category: string): LogicNode[] {
+    if (!this.groupedLogic) {
+      return [];
+    }
+    return this.groupedLogic[category] || [];
+  }
+
+  getActionCategories(): string[] {
+    if (!this.groupedActions) {
+      return [];
+    }
+    return Object.keys(this.groupedActions);
+  }
+
+  getLogicCategories(): string[] {
+    if (!this.groupedLogic) {
+      return [];
+    }
+    return Object.keys(this.groupedLogic);
+  }
+
+  @Builder
+  LogicContent() {
+    Column({ space: 16 }) {
+      Text('Logic Nodes')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1F2937')
+
+      ForEach(this.getLogicCategories(), (category: string) => {
+        Column({ space: 16 }) {
+          Row() {
+            Text(this.getLogicCategoryLabel(category))
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#6B7280')
+          }
+          .width('100%')
+
+          Column({ space: 12 }) {
+            ForEach(this.getCategoryLogicNodes(category), (item: LogicNode) => {
+              this.LogicNodeCard(item)
+            })
+          }
+          .width('100%')
+        }
+        .width('100%')
+      })
+    }
+    .width('100%')
+  }
+
   @Builder
   Categories() {
     Column({ space: 16 }) {
@@ -391,7 +625,7 @@ struct ActionLibrary {
       .height(32)
       .borderRadius(999)
       .onClick(() => {
-        console.log('Add action clicked:', item.title);
+        this.addActionToEditor(item.id, item.title, item.description, item.icon, item.iconColor, 'action');
       })
     }
     .width('100%')
@@ -402,7 +636,62 @@ struct ActionLibrary {
     .border({ width: 1, color: 'rgba(0, 0, 0, 0.05)' })
     .justifyContent(FlexAlign.SpaceBetween)
     .onClick(() => {
-      console.log('Action card clicked:', item.title);
+      this.addActionToEditor(item.id, item.title, item.description, item.icon, item.iconColor, 'action');
+    })
+  }
+
+  @Builder
+  LogicNodeCard(item: LogicNode) {
+    Row() {
+      Row() {
+        Text(item.icon)
+          .fontSize(24)
+          .fontColor(item.iconColor)
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(12)
+      .backgroundColor(item.iconColor + '1A')
+      .border({ width: 1, color: item.iconColor + '33' })
+      .justifyContent(FlexAlign.Center)
+
+      Column({ space: 4 }) {
+        Text(item.name)
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1F2937')
+
+        Text(item.description)
+          .fontSize(12)
+          .fontColor('#6B7280')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      .margin({ left: 16 })
+
+      Button() {
+        Text('+')
+          .fontSize(20)
+          .fontColor('#607AFB')
+      }
+      .type(ButtonType.Normal)
+      .backgroundColor('#F3F4F6')
+      .width(32)
+      .height(32)
+      .borderRadius(999)
+      .onClick(() => {
+        this.addActionToEditor(parseInt(item.id), item.name, item.description, item.icon, item.iconColor, 'condition');
+      })
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor('#FFFFFF')
+    .borderRadius(12)
+    .shadow({ radius: 4, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
+    .border({ width: 1, color: 'rgba(0, 0, 0, 0.05)' })
+    .justifyContent(FlexAlign.SpaceBetween)
+    .onClick(() => {
+      this.addActionToEditor(parseInt(item.id), item.name, item.description, item.icon, item.iconColor, 'condition');
     })
   }
 }

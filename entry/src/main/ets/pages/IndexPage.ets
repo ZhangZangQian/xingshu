@@ -1,27 +1,49 @@
 import router from '@ohos.router';
 import { PageHeader, SearchBar } from '../components/CommonComponents';
+import { Workflow } from '../models/WorkflowModels';
+import { WorkflowDataManager } from '../utils/WorkflowDataManager';
 
 interface ShortcutItem {
-  id: number;
+  id: string;
   name: string;
   actions: number;
   iconSymbol: string;
   gradient: string[];
+  isEnabled: boolean;
 }
 
 @Component
 export struct IndexPage {
   @State searchText: string = '';
-  @State shortcuts: ShortcutItem[] = [
-    { id: 1, name: 'Morning Briefing', actions: 5, iconSymbol: '\u2600', gradient: ['#FB923C', '#F59E0B'] },
-    { id: 2, name: 'Fast Charge', actions: 2, iconSymbol: '\u26A1', gradient: ['#34D399', '#0D9488'] },
-    { id: 3, name: 'Music Mix', actions: 12, iconSymbol: '\u266B', gradient: ['#D946EF', '#9333EA'] },
-    { id: 4, name: 'Work Mode', actions: 8, iconSymbol: '\u2692', gradient: ['#06B6D4', '#2563EB'] },
-    { id: 5, name: 'Home ETA', actions: 3, iconSymbol: '\uD83D\uDE97', gradient: ['#3B82F6', '#4F46E5'] },
-    { id: 6, name: 'Quick Note', actions: 1, iconSymbol: '\u270F', gradient: ['#FBBF24', '#FB923C'] },
-    { id: 7, name: 'Laundry Timer', actions: 4, iconSymbol: '\u2696', gradient: ['#94A3B8', '#475569'] },
-    { id: 8, name: 'Calculate Tip', actions: 6, iconSymbol: '\u0024', gradient: ['#4ADE80', '#059669'] }
-  ];
+  @State shortcuts: ShortcutItem[] = [];
+  private dataManager: WorkflowDataManager = WorkflowDataManager.getInstance();
+
+  aboutToAppear() {
+    this.loadWorkflows();
+  }
+
+  loadWorkflows() {
+    try {
+      const workflows = this.dataManager.getWorkflows();
+      this.shortcuts = workflows.map(wf => {
+        const shortcut: ShortcutItem = {
+          id: wf.id,
+          name: wf.name,
+          actions: wf.actionCount,
+          iconSymbol: wf.icon,
+          gradient: [wf.iconColor, this.adjustColor(wf.iconColor, -20)],
+          isEnabled: wf.isEnabled
+        };
+        return shortcut;
+      });
+    } catch (error) {
+      console.error('[IndexPage] Load workflows failed:', error);
+    }
+  }
+
+  adjustColor(color: string, percent: number): string {
+    return color;
+  }
 
   build() {
     Column() {

@@ -4,32 +4,38 @@ import { TRIGGER_DATA, CATEGORY_LABELS, TriggerCategoryLabels } from '../data/Wo
 
 @Entry
 @Component
-struct TriggerLibrary {
+struct TriggerList {
   @State searchText: string = '';
-  @State filteredCategories: string[] = [];
+  @State category: string = '';
+  @State categoryLabel: string = '';
+  @State filteredTriggers: TriggerItem[] = [];
 
   aboutToAppear(): void {
-    this.updateFilteredCategories();
+    const params = router.getParams() as Record<string, Object>;
+    if (params && params['category']) {
+      this.category = params['category'] as string;
+      this.categoryLabel = this.getTriggerCategoryLabel(this.category);
+    }
+
+    if (params && params['searchText']) {
+      this.searchText = params['searchText'] as string;
+    }
+
+    this.updateFilteredTriggers();
   }
 
-  updateFilteredCategories(): void {
-    const categories: string[] = ['basic_env', 'device_state', 'harmony_ecosystem', 'user_intent'];
+  updateFilteredTriggers(): void {
+    let filtered = TRIGGER_DATA.filter(item => item.category === this.category);
 
     if (this.searchText) {
       const lowerText = this.searchText.toLowerCase();
-      const filtered = categories.filter(category => {
-        const categoryLabel = this.getTriggerCategoryLabel(category);
-        const triggers = TRIGGER_DATA.filter(item => item.category === category);
-        const hasMatchingTrigger = triggers.some(trigger =>
-          trigger.name.toLowerCase().includes(lowerText) ||
-          trigger.description.toLowerCase().includes(lowerText)
-        );
-        return categoryLabel.toLowerCase().includes(lowerText) || hasMatchingTrigger;
-      });
-      this.filteredCategories = filtered;
-    } else {
-      this.filteredCategories = categories;
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(lowerText) ||
+        item.description.toLowerCase().includes(lowerText)
+      );
     }
+
+    this.filteredTriggers = filtered;
   }
 
   build() {
@@ -47,10 +53,13 @@ struct TriggerLibrary {
     Column() {
       Row() {
         Row()
-          .width(64)
+          .width(44)
           .height(40)
+          .onClick(() => {
+            router.back();
+          })
 
-        Text('New Automation')
+        Text(this.categoryLabel)
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .fontColor('#000000')
@@ -88,7 +97,7 @@ struct TriggerLibrary {
           .height(36)
           .onChange((value: string) => {
             this.searchText = value;
-            this.updateFilteredCategories();
+            this.updateFilteredTriggers();
           })
       }
       .width('100%')
@@ -133,27 +142,25 @@ struct TriggerLibrary {
     return colors[category] || '#6B7280';
   }
 
-  getCategoryTriggersCount(category: string): number {
-    return TRIGGER_DATA.filter(item => item.category === category).length;
-  }
-
   @Builder
   Content() {
     Scroll() {
       Column() {
-        Row() {
-          Text('Select a Category')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#8E8E93')
-            .letterSpacing(0.5)
+        if (this.filteredTriggers.length === 0) {
+          Column() {
+            Text('No triggers found')
+              .fontSize(17)
+              .fontColor('#8E8E93')
+              .margin({ top: 40 })
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.Center)
+        } else {
+          ForEach(this.filteredTriggers, (item: TriggerItem) => {
+            this.TriggerItem(item)
+          })
         }
-        .width('100%')
-        .margin({ bottom: 8, top: 16 })
-
-        ForEach(this.filteredCategories, (category: string) => {
-          this.CategoryCard(category)
-        })
 
         Text('Triggers are events that start your automation without you having to tap anything.')
           .fontSize(13)
@@ -174,29 +181,29 @@ struct TriggerLibrary {
   }
 
   @Builder
-  CategoryCard(category: string) {
+  TriggerItem(item: TriggerItem) {
     Row() {
       Row() {
-        Text(this.getCategoryIcon(category))
-          .fontSize(24)
+        Text(item.icon)
+          .fontSize(20)
           .fontColor('#FFFFFF')
       }
-      .width(44)
-      .height(44)
-      .borderRadius(12)
-      .backgroundColor(this.getCategoryColor(category))
+      .width(30)
+      .height(30)
+      .borderRadius(7)
+      .backgroundColor(item.iconColor)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .margin({ left: 16, right: 16 })
+      .margin({ left: 16, right: 12 })
 
       Column() {
-        Text(this.getTriggerCategoryLabel(category))
+        Text(item.name)
           .fontSize(17)
           .fontWeight(FontWeight.Medium)
           .fontColor('#000000')
-          .margin({ bottom: 2 })
+          .margin({ bottom: 0.5 })
 
-        Text(`${this.getCategoryTriggersCount(category)} triggers`)
+        Text(item.description)
           .fontSize(15)
           .fontColor('#8E8E93')
       }
@@ -204,7 +211,7 @@ struct TriggerLibrary {
       .alignItems(HorizontalAlign.Start)
 
       Text('\u203A')
-        .fontSize(24)
+        .fontSize(20)
         .fontColor('#C5C5C7')
         .margin({ left: 8, right: 16 })
     }
@@ -216,15 +223,19 @@ struct TriggerLibrary {
     .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
     .margin({ bottom: 12 })
     .onClick(() => {
-      router.pushUrl({
-        url: 'pages/TriggerList',
+      router.replaceUrl({
+        url: 'pages/MacroEditor',
         params: {
-          category: category,
-          searchText: this.searchText
+          trigger: {
+            id: item.id,
+            type: 'trigger',
+            title: item.name,
+            icon: item.icon,
+            iconColor: item.iconColor,
+            description: 'When'
+          }
         }
       });
     })
   }
-
-
 }

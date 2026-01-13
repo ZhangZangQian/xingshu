@@ -4,6 +4,7 @@
     "pages/Gallery",
     "pages/MacroEditor",
     "pages/ActionLibrary",
-    "pages/TriggerLibrary"
+    "pages/TriggerLibrary",
+    "pages/TriggerList"
   ]
 }
