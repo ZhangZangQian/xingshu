@@ -1,6 +1,20 @@
 import router from '@ohos.router';
-import { Workflow, WorkflowNode, WorkflowStats, TriggerType } from '../models/WorkflowModels';
+import { Workflow, WorkflowNode, WorkflowStats, TriggerType, ConfigDisplayItem } from '../models/WorkflowModels';
 import { WorkflowDataManager } from '../utils/WorkflowDataManager';
+
+interface UIWorkflowItem {
+  id: string;
+  type: 'trigger' | 'action' | 'condition' | 'nested';
+  title: string;
+  icon: string;
+  iconColor: string;
+  description?: string;
+  avatar?: string;
+  message?: string;
+  configDisplay?: ConfigDisplayItem[];
+  config?: Record<string, string | number | boolean>;
+  children?: UIWorkflowItem[];
+}
 
 interface ActionItem {
   id: string;
@@ -12,84 +26,79 @@ interface ActionItem {
   children?: ActionItem[];
   avatar?: string;
   message?: string;
+  config?: Record<string, string | number | boolean>;
+  configDisplay?: ConfigDisplayItem[];
 }
 
 @Entry
 @Component
 struct MacroEditor {
-  @State shortcutId: string = ''; // 空字符串表示新建模式
+  @State shortcutId: string = '';
   @State title: string = 'Untitled Shortcut';
-  @State trigger: ActionItem | null = null; // 单个触发器
-  @State actions: ActionItem[] = []; // 动作列表
+  @State isEditingTitle: boolean = false;
+  @State editingTitle: string = '';
+  @State trigger: UIWorkflowItem | null = null;
+  @State actions: UIWorkflowItem[] = [];
   @State canUndo: boolean = false;
   @State canRedo: boolean = false;
   @State canPlay: boolean = false;
-  @State isCreateMode: boolean = true; // 是否为新建模式
-  @State icon: string = '\u2708'; // 默认图标
-  @State iconColor: string = '#607AFB'; // 默认图标颜色
-  @State isEnabled: boolean = true; // 是否启用
+  @State icon: string = '\u2708';
+  @State iconColor: string = '#607AFB';
+  @State isEnabled: boolean = true;
+  @State expandedConfigIds: string[] = [];
 
   private dataManager: WorkflowDataManager = WorkflowDataManager.getInstance();
 
   aboutToAppear() {
-    //TODO 找到最新的跳转方案
-    const params = router.getParams() as Record<string, Object>;
+    const params = this.getUIContext().getRouter().getParams() as Record<string, Object>;
     if (params) {
-      // 接收 trigger 参数（从 TriggerLibrary 选择后返回）
-      if (params['trigger']) {
-        const triggerData = params['trigger'] as Record<string, Object>;
-        this.trigger = {
-          id: triggerData['id'] as string,
-          type: triggerData['type'] as 'trigger',
-          title: triggerData['title'] as string,
-          icon: triggerData['icon'] as string,
-          iconColor: triggerData['iconColor'] as string,
-          description: triggerData['description'] as string
-        };
-        // 恢复已有 actions
-        // if (params['existingActions']) {
-        //   this.actions = params['existingActions'] as ActionItem[];
-        // }
-        this.isCreateMode = false;
-      }
-      // 接收 action 参数（从 ActionLibrary 选择后返回）
-      else if (params['action']) {
-        const actionData = params['action'] as Record<string, Object>;
-        const actionItem: ActionItem = {
-          id: actionData['id'] as string,
-          type: actionData['type'] as 'action' | 'condition' | 'nested',
-          title: actionData['title'] as string,
-          icon: actionData['icon'] as string,
-          iconColor: actionData['iconColor'] as string,
-          description: actionData['description'] as string
-        };
-        // 恢复已有 trigger
-        // if (params['existingTrigger']) {
-        //   this.trigger = params['existingTrigger'] as ActionItem;
-        // }
-        // 恢复已有 actions
-        if (params['existingActions']) {
-          this.actions = [...params['existingActions'] as ActionItem[]];
-        }
-        // 追加新 action
-        this.actions.push(actionItem);
-        this.isCreateMode = false;
-      }
       // 接收 shortcut_id 判断模式
-      else if (params['shortcut_id']) {
+      if (params['shortcut_id']) {
         this.shortcutId = params['shortcut_id'] as string;
-        this.isCreateMode = false;
         this.loadWorkflowFromManager();
       }
       // 兼容 title 参数
       if (params['title']) {
         this.title = params['title'] as string;
       }
-
       this.updateCounts();
-    } else {
-      // 没有参数，默认为新建模式
-      this.isCreateMode = true;
+    }
+  }
+
+  onPageShow(): void {
+    const params = this.getUIContext().getRouter().getParams() as Record<string, Object>;
+    if (params) {
+      if (params['trigger']) {
+        const triggerData = params['trigger'] as Record<string, Object>;
+        this.trigger = {
+          id: triggerData['id'] as string,
+          type: 'trigger',
+          title: triggerData['title'] as string,
+          icon: triggerData['icon'] as string,
+          iconColor: triggerData['iconColor'] as string,
+          description: triggerData['description'] as string,
+          configDisplay: triggerData['configDisplay'] as ConfigDisplayItem[],
+          config: triggerData['config'] as Record<string, string | number | boolean>
+        };
+        this.updateCounts();
+        console.info('[MacroEditor] Trigger received:', JSON.stringify(this.trigger));
+      }
+      else if (params['action']) {
+        const actionData = params['action'] as Record<string, Object>;
+        const actionItem: UIWorkflowItem = {
+          id: actionData['id'] as string,
+          type: actionData['type'] as 'action' | 'condition' | 'nested',
+          title: actionData['title'] as string,
+          icon: actionData['icon'] as string,
+          iconColor: actionData['iconColor'] as string,
+          description: actionData['description'] as string,
+          configDisplay: actionData['configDisplay'] as ConfigDisplayItem[],
+          config: actionData['config'] as Record<string, string | number | boolean>
+        };
+        this.actions = [...this.actions, actionItem];
+        this.updateCounts();
+        console.info('[MacroEditor] Action received:', JSON.stringify(actionItem));
+      }
     }
   }
 
@@ -113,11 +122,10 @@ struct MacroEditor {
     }
   }
 
-  // 将WorkflowNode转换为ActionItem（用于UI展示）
-  convertWorkflowNodesToActionItems(nodes: WorkflowNode[]): ActionItem[] {
-    const result: ActionItem[] = [];
+  convertWorkflowNodesToActionItems(nodes: WorkflowNode[]): UIWorkflowItem[] {
+    const result: UIWorkflowItem[] = [];
     nodes.forEach(node => {
-      const actionItem: ActionItem = {
+      const actionItem: UIWorkflowItem = {
         id: node.id,
         type: node.type,
         title: node.title,
@@ -131,8 +139,7 @@ struct MacroEditor {
     return result;
   }
 
-  // 将ActionItem转换为WorkflowNode（用于保存）
-  convertActionItemsToWorkflowNodes(items: ActionItem[]): WorkflowNode[] {
+  convertActionItemsToWorkflowNodes(items: UIWorkflowItem[]): WorkflowNode[] {
     const result: WorkflowNode[] = [];
     items.forEach(item => {
       const workflowNode: WorkflowNode = {
@@ -144,6 +151,7 @@ struct MacroEditor {
         icon: item.icon,
         iconColor: item.iconColor,
         description: item.description,
+        config: item.config ? new Map(Object.entries(item.config)) : undefined,
         children: item.children ? this.convertActionItemsToWorkflowNodes(item.children) : undefined
       };
       result.push(workflowNode);
@@ -151,65 +159,50 @@ struct MacroEditor {
     return result;
   }
 
-  // 加载编辑模式的 mock 数据
-  loadMockData() {
-    this.trigger = {
-      id: '1',
-      type: 'trigger',
-      title: 'At 7:00 AM Daily',
-      icon: '\u23F0',
-      iconColor: '#FF9500',
-      description: 'When'
-    };
-    this.actions = [
-      {
-        id: '2',
-        type: 'action',
-        title: 'Get Current Weather',
-        icon: '\u2600',
-        iconColor: '#FF9500',
-        description: 'at Current Location'
-      },
-      {
-        id: '3',
-        type: 'condition',
-        title: 'Scripting',
-        icon: '\uD83D\uDEAA',
-        iconColor: '#A855F7',
-        description: 'If Temperature is greater than 30°C',
-          children: [
-          {
-            id: '4',
-            type: 'nested',
-            title: 'Send Message',
-            icon: '\uD83D\uDCAC',
-            iconColor: '#22C55E',
-            description: 'To: Mom',
-            avatar: 'M',
-            message: 'It\'s getting hot in here!'
-          }
-        ]
-      },
-      {
-        id: '5',
-        type: 'action',
-        title: 'Play Music',
-        icon: '\u266B',
-        iconColor: '#EC4899',
-        description: 'Playlist: Morning Vibes ☀️'
-      }
-    ];
-    this.updateCounts();
-  }
-
   // 更新计数器
   updateCounts() {
     this.canPlay = this.trigger !== null && this.actions.length > 0;
   }
 
-  // 判断是否有 Trigger
   hasTrigger(): boolean {
     return this.trigger !== null;
+  }
+
+  isConfigExpanded(itemId: string): boolean {
+    return this.expandedConfigIds.includes(itemId);
+  }
+
+  toggleConfigPanel(itemId: string, forceState?: boolean) {
+    const index = this.expandedConfigIds.indexOf(itemId);
+    const newState = forceState !== undefined ? forceState : index === -1;
+
+    if (newState && index === -1) {
+      this.expandedConfigIds = [...this.expandedConfigIds, itemId];
+    } else if (!newState && index !== -1) {
+      this.expandedConfigIds = this.expandedConfigIds.filter(id => id !== itemId);
+    }
+  }
+
+  updateConfigValue(item: UIWorkflowItem, configKey: string, newValue: string | number | boolean) {
+    if (!item.config) {
+      item.config = {};
+    }
+    item.config[configKey] = newValue;
+
+    if (item.configDisplay) {
+      const displayItem: ConfigDisplayItem | undefined = item.configDisplay.find(d => d.configKey === configKey);
+      if (displayItem) {
+        displayItem.label = this.formatDisplayValue(newValue, configKey);
+      }
+    }
+  }
+
+  formatDisplayValue(value: string | number | boolean, configKey?: string): string {
+    return String(value);
+  }
+
+  validateConfigValue(value: string, configKey?: string): boolean {
+    return true;
   }
 
 
@@ -226,7 +219,7 @@ struct MacroEditor {
   async saveWorkflow() {
     try {
       // 合并 trigger 和 actions
-      const allItems: ActionItem[] = [];
+      const allItems: UIWorkflowItem[] = [];
       if (this.trigger) {
         allItems.push(this.trigger);
       }
@@ -239,7 +232,7 @@ struct MacroEditor {
         name: this.title,
         icon: this.icon,
         iconColor: this.iconColor,
-        createdAt: this.isCreateMode ? Date.now() : 0,
+        createdAt: !this.shortcutId ? Date.now() : 0,
         updatedAt: Date.now(),
         isEnabled: this.isEnabled,
         triggerCount: this.trigger ? 1 : 0,
@@ -247,7 +240,7 @@ struct MacroEditor {
         nodes: nodes
       };
 
-      if (this.isCreateMode) {
+      if (!this.shortcutId) {
         await this.dataManager.createWorkflow(workflow);
       } else {
         // 更新现有工作流，保留原有的createdAt
@@ -301,13 +294,39 @@ struct MacroEditor {
       })
 
       Column() {
-        Text(this.title)
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#000000')
+        if (this.isEditingTitle) {
+          TextInput({ text: this.editingTitle })
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+            .backgroundColor('#F3F4F6')
+            .borderRadius(8)
+            .padding({ left: 8, right: 8 })
+            .onChange((value: string) => {
+              this.editingTitle = value;
+            })
+            .onSubmit(() => {
+              if (this.editingTitle.trim()) {
+                this.title = this.editingTitle.trim();
+              }
+              this.isEditingTitle = false;
+            })
+            .onBlur(() => {
+              if (this.editingTitle.trim()) {
+                this.title = this.editingTitle.trim();
+              }
+              this.isEditingTitle = false;
+            })
+            .width(200)
+        } else {
+          Text(this.title)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
+        }
 
         // 只在编辑模式下显示 Automation 标签
-        if (!this.isCreateMode) {
+        if (this.shortcutId) {
           Row() {
             Text('')
               .width(6)
@@ -326,6 +345,15 @@ struct MacroEditor {
         }
       }
       .alignItems(HorizontalAlign.Center)
+      .gesture(
+        TapGesture({ count: 2 })
+          .onAction(() => {
+            if (!this.isEditingTitle) {
+              this.isEditingTitle = true;
+              this.editingTitle = this.title;
+            }
+          })
+      )
 
       Button() {
         Text('Done')
@@ -355,8 +383,9 @@ struct MacroEditor {
   Content() {
     Scroll() {
       Column() {
-        if (this.isCreateMode) {
-          // 新建模式：显示 Add Trigger 和空状态
+        // 根据 trigger 和 actions 状态动态显示内容
+        if (!this.hasTrigger()) {
+          // 没有 Trigger：显示 Add Trigger 按钮
           Column() {
             Row() {
               Text('Trigger')
@@ -372,45 +401,22 @@ struct MacroEditor {
           }
           .width('100%')
           .margin({ bottom: 20 })
+        } else {
+          // 有 Trigger：显示 Trigger
+          this.TriggerSection(this.trigger as UIWorkflowItem);
+        }
 
+        // Actions 区域
+        if (this.actions.length === 0) {
+          // 没有 Actions：显示空状态
           Column() {
             this.EmptyStateSection()
           }
           .layoutWeight(1)
           .margin({ top: 32, bottom: 80 })
         } else {
-          // 编辑模式：显示已有的触发器和动作列表
-          if (this.hasTrigger()) {
-            // 有 Trigger：先显示 Trigger，再显示其他动作
-            this.TriggerSection(this.trigger!)
-
-            if (this.actions.length > 0) {
-              this.ActionsSection()
-            }
-          } else {
-            // 没有 Trigger：显示 Add Trigger 按钮
-            Column() {
-              Row() {
-                Text('Trigger')
-                  .fontSize(11)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor('#9CA3AF')
-                  .letterSpacing(0.5)
-              }
-              .width('100%')
-              .margin({ bottom: 8 })
-
-              this.AddTriggerButton()
-            }
-            .width('100%')
-            .margin({ bottom: 20 })
-
-            // 如果已有 actions，也显示它们
-            if (this.actions.length > 0) {
-              this.ActionsSection()
-            }
-          }
-
+          // 有 Actions：显示 Actions 列表和 Add Action 按钮
+          this.ActionsSection()
           this.AddActionButton()
         }
       }
@@ -454,12 +460,8 @@ struct MacroEditor {
     .height(64)
     .padding({ left: 16, right: 16 })
     .onClick(() => {
-      //TODO 替换最新的
       router.pushUrl({
-        url: 'pages/TriggerLibrary',
-        params: {
-          existingActions: this.actions
-        }
+        url: 'pages/TriggerLibrary'
       });
     })
   }
@@ -525,11 +527,7 @@ struct MacroEditor {
       .height(64)
       .onClick(() => {
         router.pushUrl({
-          url: 'pages/ActionLibrary',
-          params: {
-            existingActions: this.actions,
-            existingTrigger: this.trigger
-          }
+          url: 'pages/ActionLibrary'
         });
       })
     }
@@ -539,7 +537,7 @@ struct MacroEditor {
   }
 
   @Builder
-  TriggerSection(triggerItem: ActionItem) {
+  TriggerSection(triggerItem: UIWorkflowItem) {
     Stack() {
       Column() {
         Row() {
@@ -584,12 +582,23 @@ struct MacroEditor {
       .width('100%')
       .margin({ bottom: 8, top: 8 })
 
-      Column({ space: 12 }) {
-        ForEach(this.actions, (item: ActionItem, index: number) => {
+      Column() {
+        ForEach(this.actions, (item: UIWorkflowItem, index: number) => {
           if (item.type === 'condition') {
             this.ConditionBlock(item, index)
           } else {
-            this.ActionItemWithConnector(item, index)
+            Column() {
+              this.ActionCard(item, index)
+              
+              if (index < this.actions.length - 1) {
+                Row()
+                  .width(2)
+                  .height(12)
+                  .backgroundColor('#D1D5DB')
+                  .margin({ left: 36 })
+              }
+            }
+            .width('100%')
           }
         })
       }
@@ -599,188 +608,382 @@ struct MacroEditor {
   }
 
   @Builder
-  ActionItemWithConnector(item: ActionItem, index: number) {
-    Stack() {
-      if (this.shouldShowConnector(index)) {
-        Row()
-          .width(2)
-          .height('100%')
-          .backgroundColor('#D1D5DB')
-          .position({ x: 36, y: 0 })
-          .zIndex(-1)
-      }
-
-      this.ActionCard(item, index)
-    }
-    .width('100%')
+  ActionItemWithConnector(item: UIWorkflowItem, index: number) {
+    this.ActionCard(item, index)
   }
 
   @Builder
-  TriggerCard(item: ActionItem) {
-    Stack() {
-      Row() {
-        Row() {
-          Text(item.icon)
-            .fontSize(24)
-            .fontColor('#FF9500')
+  ConfigDisplayChip(configItem: ConfigDisplayItem, item: UIWorkflowItem) {
+    if (configItem.displayType === 'text') {
+      Text(configItem.label)
+        .fontSize(12)
+        .fontColor('#6B7280')
+        .fontWeight(FontWeight.Medium)
+    } else if (configItem.displayType === 'button' || configItem.displayType === 'tag') {
+      Button(configItem.label) {
+        Row({ space: 4 }) {
+          if (configItem.style?.icon) {
+            Text(configItem.style.icon)
+              .fontSize(14)
+              .fontColor(configItem.style.textColor)
+          }
+          Text(configItem.label)
+            .fontSize(12)
+            .fontColor(configItem.style?.textColor || '#2563EB')
         }
-        .width(40)
-        .height(40)
-        .borderRadius(12)
-        .backgroundColor('#FFF0D6')
+      }
+      .type(ButtonType.Normal)
+      .backgroundColor(configItem.style?.backgroundColor || '#EFF6FF')
+      .borderRadius(6)
+      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+      .border({
+        width: 1,
+        color: configItem.style?.borderColor || '#BFDBFE'
+      })
+      .onClick(() => {
+        this.toggleConfigPanel(item.id);
+      })
+    } else if (configItem.displayType === 'icon-tag') {
+      Row({ space: 4 }) {
+        if (configItem.style?.icon) {
+          Text(configItem.style.icon || '')
+            .fontSize(12)
+            .fontColor(configItem.style?.textColor)
+        }
+        Text(configItem.label)
+          .fontSize(12)
+          .fontColor(configItem.style?.textColor)
+      }
+      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+      .backgroundColor(configItem.style?.backgroundColor)
+      .borderRadius(6)
+      .border({ width: 1, color: configItem.style?.borderColor })
+      .onClick(() => {
+        if (configItem.configKey) {
+          this.toggleConfigPanel(item.id);
+        }
+      })
+    } else if (configItem.displayType === 'avatar-tag') {
+      Row({ space: 4 }) {
+        Row() {
+          Text(configItem.style?.avatar?.letter || '')
+            .fontSize(9)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(configItem.style?.avatar?.textColor)
+        }
+        .width(16)
+        .height(16)
+        .borderRadius(999)
+        .backgroundColor(configItem.style?.avatar?.bgColor)
         .justifyContent(FlexAlign.Center)
 
-        Column() {
-          Row() {
-            Text(item.description || '')
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#FF9500')
-              .letterSpacing(0.5)
-
-            Blank()
-
-            Text('\u22EE')
-              .fontSize(20)
-              .fontColor('#D1D5DB')
-          }
-          .width('100%')
-
-          Text(item.title)
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#000000')
-            .margin({ top: 4 })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 12 })
+        Text(configItem.label)
+          .fontSize(12)
+          .fontColor(configItem.style?.textColor)
       }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(12)
-      .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
-      .border({ width: 2, color: 'rgba(255, 149, 0, 0.3)' })
+      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+      .backgroundColor(configItem.style?.backgroundColor)
+      .borderRadius(6)
+      .border({ width: 1, color: configItem.style?.borderColor })
+      .onClick(() => {
+        if (configItem.configKey) {
+          this.toggleConfigPanel(item.id);
+        }
+      })
     }
-    .width('100%')
-    .borderRadius(12)
   }
 
   @Builder
-  ActionCard(item: ActionItem, index: number) {
-    Stack() {
+  ExpandedConfigPanel(item: UIWorkflowItem) {
+    Column() {
       Row() {
-        Stack() {
+        Text('Configuration')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#6B7280')
+
+        Blank()
+
+        Button() {
+          Text('✕')
+            .fontSize(16)
+            .fontColor('#9CA3AF')
+        }
+        .type(ButtonType.Normal)
+        .backgroundColor('transparent')
+        .onClick(() => {
+          this.toggleConfigPanel(item.id, false);
+        })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .border({ width: { bottom: 1 }, color: '#E5E5EA' })
+
+      if (item.configDisplay) {
+        ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
+          this.ConfigItemEditor(configItem, item)
+        })
+      }
+    }
+    .width('100%')
+    .backgroundColor('#F9FAFB')
+    .borderRadius(12)
+    .margin({ top: 8 })
+  }
+
+  @Builder
+  ConfigItemEditor(configItem: ConfigDisplayItem, item: UIWorkflowItem) {
+    Row() {
+      Text(configItem.configKey || '')
+        .fontSize(14)
+        .fontColor('#374151')
+        .width(100)
+
+      Blank()
+
+      if (configItem.configKey && item.config) {
+        this.ConfigValueInput(configItem, item.config[configItem.configKey] || '', (newValue) => {
+          this.updateConfigValue(item, configItem.configKey!, newValue);
+        })
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+  }
+
+  @Builder
+  ConfigValueInput(configItem: ConfigDisplayItem, currentValue: string | number | boolean, onChange: (value: string | number | boolean) => void) {
+    TextInput({ text: String(currentValue) })
+      .onChange((value: string) => {
+        if (this.validateConfigValue(value, configItem.configKey)) {
+          onChange(value);
+        }
+      })
+      .width(200)
+      .fontSize(14)
+      .fontColor('#000000')
+      .backgroundColor('#FFFFFF')
+      .borderRadius(6)
+      .border({ width: 1, color: '#E5E7EB' })
+      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+  }
+
+  @Builder
+  TriggerCard(item: UIWorkflowItem) {
+    Stack() {
+      Column() {
+        Row() {
           Row() {
             Text(item.icon)
               .fontSize(24)
-              .fontColor(item.iconColor)
+              .fontColor('#FF9500')
           }
           .width(40)
           .height(40)
           .borderRadius(12)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor('#FFF0D6')
           .justifyContent(FlexAlign.Center)
 
-          Row()
+          Column() {
+            Row() {
+              Text(item.description || '')
+                .fontSize(12)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FF9500')
+                .letterSpacing(0.5)
+
+              Blank()
+
+              Button() {
+                Text(this.isConfigExpanded(item.id) ? '▲' : '▼')
+                  .fontSize(12)
+                  .fontColor('#9CA3AF')
+              }
+              .type(ButtonType.Normal)
+              .backgroundColor('#F3F4F6')
+              .width(28)
+              .height(28)
+              .borderRadius(6)
+              .onClick(() => {
+                this.toggleConfigPanel(item.id);
+              })
+            }
+            .width('100%')
+
+            Text(item.title)
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#000000')
+              .margin({ top: 4 })
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+          .margin({ left: 12 })
+        }
+        .width('100%')
+        .padding(16)
+        .backgroundColor('#FFFFFF')
+        .borderRadius(12)
+        .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
+        .border({ width: 2, color: 'rgba(255, 149, 0, 0.3)' })
+
+        if (item.configDisplay && item.configDisplay.length > 0) {
+          Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+            ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
+              this.ConfigDisplayChip(configItem, item)
+            })
+          }
+          .margin({ top: 8 })
+        }
+
+        if (this.isConfigExpanded(item.id)) {
+          this.ExpandedConfigPanel(item)
+        }
+      }
+      .width('100%')
+    }
+    .borderRadius(12)
+  }
+
+  @Builder
+  ActionCard(item: UIWorkflowItem, index: number) {
+    Stack() {
+      Column() {
+        Row() {
+          Stack() {
+            Row() {
+              Text(item.icon)
+                .fontSize(24)
+                .fontColor(item.iconColor)
+            }
             .width(40)
             .height(40)
             .borderRadius(12)
-            .backgroundColor(item.iconColor + '1A')
-        }
-        .width(40)
-        .height(40)
+            .backgroundColor('#FFFFFF')
+            .justifyContent(FlexAlign.Center)
 
-        Column() {
-          Row() {
+            Row()
+              .width(40)
+              .height(40)
+              .borderRadius(12)
+              .backgroundColor(item.iconColor + '1A')
+          }
+          .width(40)
+          .height(40)
+
+          Column() {
+            Row() {
               Text(item.title)
                 .fontSize(16)
                 .fontWeight(FontWeight.Bold)
                 .fontColor('#000000')
 
-            Blank()
+              Blank()
 
-            Text('\u2630')
-              .fontSize(20)
-              .fontColor('#D1D5DB')
-          }
-          .width('100%')
+              if (item.configDisplay && item.configDisplay.length > 0) {
+                Button() {
+                  Text('⚙️')
+                    .fontSize(14)
+                    .fontColor('#9CA3AF')
+                }
+                .type(ButtonType.Normal)
+                .backgroundColor('transparent')
+                .width(28)
+                .height(28)
+                .borderRadius(6)
+                .onClick(() => {
+                  this.toggleConfigPanel(item.id);
+                })
+              }
+            }
+            .width('100%')
 
-          if (item.description) {
-            Column() {
-              if (item.avatar) {
-                Row() {
-                  Text(item.description.split(':')[0] + ':')
+            if (item.configDisplay && item.configDisplay.length > 0) {
+              Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+                ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
+                  this.ConfigDisplayChip(configItem, item)
+                })
+              }
+              .margin({ top: 8 })
+            } else if (item.description) {
+              Column() {
+                if (item.avatar) {
+                  Row() {
+                    Text(item.description.split(':')[0] + ':')
+                      .fontSize(12)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor('#6B7280')
+
+                    Row() {
+                      Text(item.avatar)
+                        .fontSize(9)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor('#166534')
+
+                      Text(item.description.split(': ')[1])
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor('#166534')
+                        .margin({ left: 4 })
+                    }
+                    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                    .backgroundColor('#F0FDF4')
+                    .borderRadius(6)
+                    .margin({ left: 8 })
+                  }
+                  .margin({ top: 6 })
+                } else {
+                  Text(item.description)
                     .fontSize(12)
                     .fontWeight(FontWeight.Medium)
                     .fontColor('#6B7280')
+                    .margin({ top: 6 })
+                }
 
+                if (item.message) {
                   Row() {
-                    Text(item.avatar)
-                      .fontSize(9)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor('#166534')
+                    Text('\u275D')
+                      .fontSize(14)
+                      .fontColor('#9CA3AF')
+                      .margin({ top: 2 })
 
-                    Text(item.description.split(': ')[1])
+                    Text(item.message)
                       .fontSize(12)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor('#166534')
-                      .margin({ left: 4 })
+                      .fontColor('#374151')
+                      .fontStyle(FontStyle.Italic)
                   }
-                  .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                  .backgroundColor('#F0FDF4')
-                  .borderRadius(6)
-                  .margin({ left: 8 })
+                  .width('100%')
+                  .padding(8)
+                  .backgroundColor('#F9FAFB')
+                  .borderRadius(8)
+                  .border({ width: 1, color: '#F3F4F6' })
+                  .margin({ top: 8 })
                 }
-                .margin({ top: 6 })
-              } else {
-                Text(item.description)
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor('#6B7280')
-                  .margin({ top: 6 })
               }
-
-              if (item.message) {
-                Row() {
-                  Text('\u275D')
-                    .fontSize(14)
-                    .fontColor('#9CA3AF')
-                    .margin({ top: 2 })
-
-                  Text(item.message)
-                    .fontSize(12)
-                    .fontColor('#374151')
-                    .fontStyle(FontStyle.Italic)
-                }
-                .width('100%')
-                .padding(8)
-                .backgroundColor('#F9FAFB')
-                .borderRadius(8)
-                .border({ width: 1, color: '#F3F4F6' })
-                .margin({ top: 8 })
-              }
+              .alignItems(HorizontalAlign.Start)
             }
-            .alignItems(HorizontalAlign.Start)
           }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+          .margin({ left: 12 })
         }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 12 })
+        .width('100%')
+        .padding(16)
+        .backgroundColor('#FFFFFF')
+        .borderRadius(12)
+        .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
+        .border({ width: 1, color: '#E5E5EA' })
+
+        if (this.isConfigExpanded(item.id)) {
+          this.ExpandedConfigPanel(item)
+        }
       }
       .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(12)
-      .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
-      .border({ width: 1, color: '#E5E5EA' })
     }
-    .width('100%')
   }
 
   @Builder
-  ConditionBlock(item: ActionItem, index: number) {
+  ConditionBlock(item: UIWorkflowItem, index: number) {
     Column() {
       Row() {
         Stack() {
@@ -814,13 +1017,32 @@ struct MacroEditor {
 
             Blank()
 
-            Text('\u2630')
-              .fontSize(20)
-              .fontColor('#D1D5DB')
+            if (item.configDisplay && item.configDisplay.length > 0) {
+              Button() {
+                Text('⚙️')
+                  .fontSize(14)
+                  .fontColor('#9CA3AF')
+              }
+              .type(ButtonType.Normal)
+              .backgroundColor('transparent')
+              .width(28)
+              .height(28)
+              .borderRadius(6)
+              .onClick(() => {
+                this.toggleConfigPanel(item.id);
+              })
+            }
           }
           .width('100%')
 
-          if (item.description) {
+          if (item.configDisplay && item.configDisplay.length > 0) {
+            Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+              ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
+                this.ConfigDisplayChip(configItem, item)
+              })
+            }
+            .margin({ top: 8 })
+          } else if (item.description) {
             Column() {
               if (item.avatar) {
                 Row() {
@@ -889,9 +1111,13 @@ struct MacroEditor {
       .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
       .border({ width: 1, color: '#E5E5EA' })
 
+      if (this.isConfigExpanded(item.id)) {
+        this.ExpandedConfigPanel(item)
+      }
+
       if (item.children && item.children.length > 0) {
-        Column({ space: 12 }) {
-          ForEach(item.children, (child: ActionItem, index: number) => {
+        Column({ space: 0 }) {
+          ForEach(item.children, (child: UIWorkflowItem, index: number) => {
             this.NestedActionCard(child)
           })
 
@@ -905,7 +1131,7 @@ struct MacroEditor {
   }
 
   @Builder
-  NestedActionCard(item: ActionItem) {
+  NestedActionCard(item: UIWorkflowItem) {
     Row() {
       Stack() {
         Row() {
@@ -930,20 +1156,39 @@ struct MacroEditor {
 
       Column() {
         Row() {
-            Text(item.title)
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#000000')
+          Text(item.title)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#000000')
 
           Blank()
 
-          Text('\u2630')
-            .fontSize(20)
-            .fontColor('#D1D5DB')
+          if (item.configDisplay && item.configDisplay.length > 0) {
+            Button() {
+              Text('⚙️')
+                .fontSize(14)
+                .fontColor('#9CA3AF')
+            }
+            .type(ButtonType.Normal)
+            .backgroundColor('transparent')
+            .width(28)
+            .height(28)
+            .borderRadius(6)
+            .onClick(() => {
+              this.toggleConfigPanel(item.id);
+            })
+          }
         }
         .width('100%')
 
-        if (item.description) {
+        if (item.configDisplay && item.configDisplay.length > 0) {
+          Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+            ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
+              this.ConfigDisplayChip(configItem, item)
+            })
+          }
+          .margin({ top: 8 })
+        } else if (item.description) {
           Column() {
             if (item.avatar) {
               Row() {
@@ -1067,11 +1312,7 @@ struct MacroEditor {
     .margin({ top: 12, bottom: 12 })
       .onClick(() => {
         router.pushUrl({
-          url: 'pages/ActionLibrary',
-          params: {
-            existingActions: this.actions,
-            existingTrigger: this.trigger
-          }
+          url: 'pages/ActionLibrary'
         });
       })
   }
@@ -1080,7 +1321,7 @@ struct MacroEditor {
   BottomPanel() {
     Column() {
       Row() {
-        if (this.isCreateMode) {
+        if (!this.shortcutId) {
           // 新建模式：动态的统计和状态控制
           Text(`${this.trigger ? 1 : 0} TRIGGERS • ${this.actions.length} ACTIONS`)
             .fontSize(11)

@@ -1,17 +1,23 @@
 import router from '@ohos.router';
 import { TriggerItem } from '../models/WorkflowModels';
 import { TRIGGER_DATA, CATEGORY_LABELS, TriggerCategoryLabels } from '../data/WorkflowData';
+import { getConfigDisplayTemplate } from '../data/ConfigTemplates';
 
 @Entry
 @Component
 struct TriggerLibrary {
+  @State currentLevel: 'category' | 'list' = 'category'; // 当前层级：分类列表或触发器列表
+  @State selectedCategory: string = ''; // 选中的分类
+  @State categoryLabel: string = ''; // 分类显示名称
   @State searchText: string = '';
   @State filteredCategories: string[] = [];
+  @State filteredTriggers: TriggerItem[] = [];
 
   aboutToAppear(): void {
     this.updateFilteredCategories();
   }
 
+  // 更新过滤的分类列表
   updateFilteredCategories(): void {
     const categories: string[] = ['basic_env', 'device_state', 'harmony_ecosystem', 'user_intent'];
 
@@ -32,6 +38,36 @@ struct TriggerLibrary {
     }
   }
 
+  // 更新过滤的触发器列表
+  updateFilteredTriggers(): void {
+    let filtered = TRIGGER_DATA.filter(item => item.category === this.selectedCategory);
+
+    if (this.searchText) {
+      const lowerText = this.searchText.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(lowerText) ||
+        item.description.toLowerCase().includes(lowerText)
+      );
+    }
+
+    this.filteredTriggers = filtered;
+  }
+
+  // 选择分类，切换到触发器列表层级
+  selectCategory(category: string): void {
+    this.selectedCategory = category;
+    this.categoryLabel = this.getTriggerCategoryLabel(category);
+    this.currentLevel = 'list';
+    this.updateFilteredTriggers();
+  }
+
+  // 返回分类列表层级
+  backToCategories(): void {
+    this.currentLevel = 'category';
+    this.selectedCategory = '';
+    this.categoryLabel = '';
+  }
+
   build() {
     Column() {
       this.Header()
@@ -46,11 +82,22 @@ struct TriggerLibrary {
   Header() {
     Column() {
       Row() {
-        Row()
-          .width(64)
-          .height(40)
+        // 返回按钮：在触发器列表层级显示，点击返回分类列表
+        if (this.currentLevel === 'list') {
+          Row()
+            .width(44)
+            .height(40)
+            .onClick(() => {
+              this.backToCategories();
+            })
+        } else {
+          Row()
+            .width(64)
+            .height(40)
+        }
 
-        Text('New Automation')
+        // 标题：根据层级显示不同文本
+        Text(this.currentLevel === 'category' ? 'New Automation' : this.categoryLabel)
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .fontColor('#000000')
@@ -88,7 +135,12 @@ struct TriggerLibrary {
           .height(36)
           .onChange((value: string) => {
             this.searchText = value;
-            this.updateFilteredCategories();
+            // 根据当前层级更新不同的列表
+            if (this.currentLevel === 'category') {
+              this.updateFilteredCategories();
+            } else {
+              this.updateFilteredTriggers();
+            }
           })
       }
       .width('100%')
@@ -137,23 +189,53 @@ struct TriggerLibrary {
     return TRIGGER_DATA.filter(item => item.category === category).length;
   }
 
+  getDefaultConfigValues(item: TriggerItem): Record<string, Object> {
+    const config: Record<string, Object> = {};
+    item.configs?.forEach(c => {
+      if (c.defaultValue !== undefined) {
+        config[c.key] = c.defaultValue;
+      }
+    });
+    return config;
+  }
+
   @Builder
   Content() {
     Scroll() {
       Column() {
-        Row() {
-          Text('Select a Category')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#8E8E93')
-            .letterSpacing(0.5)
-        }
-        .width('100%')
-        .margin({ bottom: 8, top: 16 })
+        if (this.currentLevel === 'category') {
+          // 分类列表层级
+          Row() {
+            Text('Select a Category')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#8E8E93')
+              .letterSpacing(0.5)
+          }
+          .width('100%')
+          .margin({ bottom: 8, top: 16 })
 
-        ForEach(this.filteredCategories, (category: string) => {
-          this.CategoryCard(category)
-        })
+          ForEach(this.filteredCategories, (category: string) => {
+            this.CategoryCard(category)
+          })
+        } else {
+          // 触发器列表层级
+          if (this.filteredTriggers.length === 0) {
+            Column() {
+              Text('No triggers found')
+                .fontSize(17)
+                .fontColor('#8E8E93')
+                .margin({ top: 40 })
+            }
+            .width('100%')
+            .height('100%')
+            .justifyContent(FlexAlign.Center)
+          } else {
+            ForEach(this.filteredTriggers, (item: TriggerItem) => {
+              this.TriggerItem(item)
+            })
+          }
+        }
 
         Text('Triggers are events that start your automation without you having to tap anything.')
           .fontSize(13)
@@ -216,15 +298,76 @@ struct TriggerLibrary {
     .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
     .margin({ bottom: 12 })
     .onClick(() => {
-      router.pushUrl({
-        url: 'pages/TriggerList',
-        params: {
-          category: category,
-          searchText: this.searchText
-        }
-      });
+      // 点击分类卡片，切换到触发器列表层级
+      this.selectCategory(category);
     })
   }
 
+  @Builder
+  TriggerItem(item: TriggerItem) {
+    Row() {
+      Row() {
+        Text(item.icon)
+          .fontSize(20)
+          .fontColor('#FFFFFF')
+      }
+      .width(30)
+      .height(30)
+      .borderRadius(7)
+      .backgroundColor(item.iconColor)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .margin({ left: 16, right: 12 })
 
+      Column() {
+        Text(item.name)
+          .fontSize(17)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#000000')
+          .margin({ bottom: 0.5 })
+
+        Text(item.description)
+          .fontSize(15)
+          .fontColor('#8E8E93')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Text('\u203A')
+        .fontSize(20)
+        .fontColor('#C5C5C7')
+        .margin({ left: 8, right: 16 })
+    }
+    .width('100%')
+    .height(72)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor('#FFFFFF')
+    .borderRadius(12)
+    .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
+    .margin({ bottom: 12 })
+    .onClick(() => {
+      try {
+        const configDisplay = getConfigDisplayTemplate(item.id);
+        const config = this.getDefaultConfigValues(item);
+
+        router.back({
+          url: 'pages/MacroEditor',
+          params: {
+            trigger: {
+              id: item.id,
+              type: 'trigger',
+              title: item.name,
+              icon: item.icon,
+              iconColor: item.iconColor,
+              description: 'When',
+              configDisplay: configDisplay,
+              config: config
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Failed to navigate back:', JSON.stringify(err));
+      }
+    })
+  }
 }

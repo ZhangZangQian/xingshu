@@ -169,3 +169,55 @@ export interface WorkflowStats {
   triggerCount: number;
   actionCount: number;
 }
+
+export interface ConfigAvatarStyle {
+  letter: string;
+  bgColor: string;
+  textColor: string;
+}
+
+export interface ConfigDisplayStyle {
+  backgroundColor?: string;
+  textColor?: string;
+  borderColor?: string;
+  icon?: string;
+  avatar?: ConfigAvatarStyle;
+}
+
+export interface ConfigValidation {
+  type: 'string' | 'number' | 'boolean';
+  required?: boolean;
+  pattern?: string;
+  min?: number;
+  max?: number;
+}
+
+export interface ConfigDisplayItem {
+  displayType: 'text' | 'button' | 'tag' | 'icon-tag' | 'avatar-tag';
+  label: string;
+  configKey?: string;
+  style?: ConfigDisplayStyle;
+  validation?: ConfigValidation;
+}
+
+// export interface ConfigValidation {
+//   type: 'string' | 'number' | 'boolean';
+//   required?: boolean;
+//   pattern?: string;
+//   min?: number;
+//   max?: number;
+// }
+
+// export interface ConfigAvatarStyle {
+//   letter: string;
+//   bgColor: string;
+//   textColor: string;
+// }
+
+// export interface ConfigDisplayStyle {
+//   backgroundColor?: string;
+//   textColor?: string;
+//   borderColor?: string;
+//   icon?: string;
+//   avatar?: ConfigAvatarStyle;
+// }

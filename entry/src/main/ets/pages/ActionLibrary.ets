@@ -1,6 +1,7 @@
 import router from '@ohos.router';
 import { ActionItem, LogicNode } from '../models/WorkflowModels';
 import { ACTION_DATA, LOGIC_DATA, CATEGORY_LABELS, ActionCategoryLabels, LogicCategoryLabels } from '../data/WorkflowData';
+import { getConfigDisplayTemplate } from '../data/ConfigTemplates';
 
 interface FeaturedWorkflow {
   title: string;
@@ -30,8 +31,6 @@ interface SuggestedAction {
 struct ActionLibrary {
   @State searchValue: string = '';
   @State selectedTab: string = 'actions'; // 'actions' or 'logic'
-  @State existingActions: ActionItem[] = [];
-  @State existingTrigger: ActionItem | null = null;
 
   @State featuredWorkflows: FeaturedWorkflow[] = [
     {
@@ -104,32 +103,57 @@ struct ActionLibrary {
   @State groupedLogic: Record<string, LogicNode[]> = {};
 
   aboutToAppear(): void {
-    const params = router.getParams() as Record<string, Object>;
-    if (params && params['existingActions']) {
-      this.existingActions = params['existingActions'] as ActionItem[];
-    }
-    if (params && params['existingTrigger']) {
-      this.existingTrigger = params['existingTrigger'] as ActionItem;
-    }
     this.updateFilteredData();
   }
 
   addActionToEditor(id: number, title: string, description: string, icon: string, iconColor: string, type: 'action' | 'condition' | 'nested') {
-    router.pushUrl({
-      url: 'pages/MacroEditor',
-      params: {
-        action: {
-          id: id.toString(),
-          type: type,
-          title: title,
-          description: description,
-          icon: icon,
-          iconColor: iconColor
-        },
-        existingActions: this.existingActions,
-        existingTrigger: this.existingTrigger
-      }
-    }, RouterMode.Single);
+    try {
+      const itemId = id.toString();
+      const configDisplay = getConfigDisplayTemplate(itemId);
+      const config = this.getDefaultConfigValues(itemId);
+
+      router.back({
+        url: 'pages/MacroEditor',
+        params: {
+          action: {
+            id: itemId,
+            type: type,
+            title: title,
+            description: description,
+            icon: icon,
+            iconColor: iconColor,
+            configDisplay: configDisplay,
+            config: config
+          }
+        }
+      });
+    } catch (err) {
+      console.error('Failed to navigate back:', JSON.stringify(err));
+    }
+  }
+
+  getDefaultConfigValues(itemId: string): Record<string, Object> {
+    const config: Record<string, Object> = {};
+
+    const action = ACTION_DATA.find(a => a.id === itemId);
+    if (action && action.configs) {
+      action.configs.forEach(c => {
+        if (c.defaultValue !== undefined) {
+          config[c.key] = c.defaultValue;
+        }
+      });
+    }
+
+    const logic = LOGIC_DATA.find(l => l.id === itemId);
+    if (logic && logic.configs) {
+      logic.configs.forEach(c => {
+        if (c.defaultValue !== undefined) {
+          config[c.key] = c.defaultValue;
+        }
+      });
+    }
+
+    return config;
   }
 
   updateFilteredData(): void {
