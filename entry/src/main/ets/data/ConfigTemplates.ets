@@ -8,14 +8,14 @@ const weatherStyle: ConfigDisplayStyle = {
   backgroundColor: '#EFF6FF',
   textColor: '#2563EB',
   borderColor: '#BFDBFE',
-  icon: '\uF56E'
+  icon: '\u26C5'
 };
 
 const scriptingStyle1: ConfigDisplayStyle = {
   backgroundColor: '#FEF3C7',
   textColor: '#D97706',
   borderColor: '#FDE68A',
-  icon: '\uF595'
+  icon: '\u26C5'
 };
 
 const scriptingStyle2: ConfigDisplayStyle = {
@@ -25,6 +25,40 @@ const scriptingStyle2: ConfigDisplayStyle = {
 };
 
 const scriptingValidation: ConfigValidation = { type: 'number', min: -100, max: 100 };
+
+const musicStyle: ConfigDisplayStyle = {
+  backgroundColor: '#FDF2F8',
+  textColor: '#EC4899',
+  borderColor: '#FBCFE8',
+  icon: '\u{1F3B5}'
+};
+
+const wifiStyle: ConfigDisplayStyle = {
+  backgroundColor: '#DBEAFE',
+  textColor: '#2563EB',
+  borderColor: '#BFDBFE',
+  icon: '\u{1F503}'
+};
+
+const displayStyle: ConfigDisplayStyle = {
+  backgroundColor: '#F3F4F6',
+  textColor: '#374151',
+  borderColor: '#E5E7EB',
+  icon: '\u{1F4F1}'
+};
+
+const volumeStyle: ConfigDisplayStyle = {
+  backgroundColor: '#FEF3C7',
+  textColor: '#D97706',
+  borderColor: '#FDE68A',
+  icon: '\u{1F50A}'
+};
+
+const messageStyle: ConfigDisplayStyle = {
+  backgroundColor: '#D1FAE5',
+  textColor: '#059669',
+  borderColor: '#A7F3D0'
+};
 
 export const CONFIG_DISPLAY_TEMPLATES: Record<string, ConfigDisplayItem[]> = {
   'time_date': [
@@ -62,27 +96,86 @@ export const CONFIG_DISPLAY_TEMPLATES: Record<string, ConfigDisplayItem[]> = {
     } as ConfigDisplayItem
   ],
 
-  'scripting': [
+  'if_else': [
     {
       displayType: 'text',
       label: 'If'
     } as ConfigDisplayItem,
     {
       displayType: 'icon-tag',
-      label: 'Temperature',
+      label: 'Variable',
       configKey: 'variable',
       style: scriptingStyle1
     } as ConfigDisplayItem,
     {
-      displayType: 'text',
-      label: 'is greater than'
+      displayType: 'tag',
+      label: '>',
+      configKey: 'operator',
+      style: scriptingStyle2
     } as ConfigDisplayItem,
     {
       displayType: 'tag',
-      label: '30°C',
-      configKey: 'threshold',
-      style: scriptingStyle2,
-      validation: scriptingValidation
+      label: '0',
+      configKey: 'value',
+      style: scriptingStyle2
+    } as ConfigDisplayItem
+  ],
+
+  'media': [
+    {
+      displayType: 'text',
+      label: 'Playlist:'
+    } as ConfigDisplayItem,
+    {
+      displayType: 'button',
+      label: 'Morning Vibes',
+      configKey: 'playlistName',
+      style: musicStyle
+    } as ConfigDisplayItem
+  ],
+
+  'wifi_bluetooth': [
+    {
+      displayType: 'icon-tag',
+      label: 'Wi-Fi',
+      configKey: 'target',
+      style: wifiStyle
+    } as ConfigDisplayItem,
+    {
+      displayType: 'tag',
+      label: 'Toggle',
+      configKey: 'action',
+      style: scriptingStyle2
+    } as ConfigDisplayItem
+  ],
+
+  'display': [
+    {
+      displayType: 'icon-tag',
+      label: 'Brightness',
+      configKey: 'type',
+      style: displayStyle
+    } as ConfigDisplayItem,
+    {
+      displayType: 'tag',
+      label: '50%',
+      configKey: 'value',
+      style: scriptingStyle2
+    } as ConfigDisplayItem
+  ],
+
+  'volume_notify': [
+    {
+      displayType: 'icon-tag',
+      label: 'Media Volume',
+      configKey: 'type',
+      style: volumeStyle
+    } as ConfigDisplayItem,
+    {
+      displayType: 'tag',
+      label: '30%',
+      configKey: 'value',
+      style: scriptingStyle2
     } as ConfigDisplayItem
   ]
 };

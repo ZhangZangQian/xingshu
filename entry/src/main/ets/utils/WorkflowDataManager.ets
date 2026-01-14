@@ -1,5 +1,7 @@
 import preferences from '@ohos.data.preferences';
-import { Workflow, WorkflowStats } from '../models/WorkflowModels';
+import { Workflow, WorkflowStats, ConfigDisplayItem, ConfigOption } from '../models/WorkflowModels';
+import { getConfigDisplayTemplate } from '../data/ConfigTemplates';
+import { ACTION_DATA, TRIGGER_DATA, LOGIC_DATA } from '../data/WorkflowData';
 
 const PREF_NAME = 'workflow_preferences';
 const KEY_WORKFLOWS = 'workflows_list';
@@ -216,5 +218,167 @@ export class WorkflowDataManager {
 
   public async refresh(): Promise<void> {
     await this.loadWorkflows();
+  }
+
+  public getActionConfigDisplay(itemId: string, config?: Record<string, string | number | boolean>): ConfigDisplayItem[] | undefined {
+    const template = getConfigDisplayTemplate(itemId);
+    if (!template) {
+      return undefined;
+    }
+
+    const display: ConfigDisplayItem[] = template.map(item => {
+      const displayItem: ConfigDisplayItem = {
+        displayType: item.displayType,
+        label: item.label,
+        configKey: item.configKey,
+        style: undefined,
+        validation: undefined
+      };
+
+      if (item.style) {
+        displayItem.style = {
+          backgroundColor: item.style.backgroundColor,
+          textColor: item.style.textColor,
+          borderColor: item.style.borderColor,
+          icon: item.style.icon,
+          avatar: item.style.avatar
+        };
+      }
+
+      if (item.validation) {
+        displayItem.validation = {
+          type: item.validation.type,
+          required: item.validation.required,
+          pattern: item.validation.pattern,
+          min: item.validation.min,
+          max: item.validation.max
+        };
+      }
+
+      if (config && item.configKey) {
+        const value = config[item.configKey];
+        if (value !== undefined) {
+          const displayValue = this.getDisplayValue(itemId, item.configKey, value);
+          displayItem.label = displayValue !== undefined ? displayValue : String(value);
+        }
+      }
+
+      return displayItem;
+    });
+
+    return display;
+  }
+
+  private getDisplayValue(itemId: string, configKey: string, value: string | number | boolean): string | undefined {
+    const action = ACTION_DATA.find(a => a.id === itemId);
+    if (action && action.configs) {
+      const configDef = action.configs.find(c => c.key === configKey);
+      if (configDef && configDef.options) {
+        const option = configDef.options.find(opt => opt.value === String(value));
+        return option ? option.label : undefined;
+      }
+    }
+
+    const logic = LOGIC_DATA.find(l => l.id === itemId);
+    if (logic && logic.configs) {
+      const configDef = logic.configs.find(c => c.key === configKey);
+      if (configDef && configDef.options) {
+        const option = configDef.options.find(opt => opt.value === String(value));
+        return option ? option.label : undefined;
+      }
+    }
+
+    const trigger = TRIGGER_DATA.find(t => t.id === itemId);
+    if (trigger && trigger.configs) {
+      const configDef = trigger.configs.find(c => c.key === configKey);
+      if (configDef && configDef.options) {
+        const option = configDef.options.find(opt => opt.value === String(value));
+        return option ? option.label : undefined;
+      }
+    }
+
+    return undefined;
+  }
+
+  public getTriggerConfigDisplay(itemId: string, config?: Record<string, string | number | boolean>): ConfigDisplayItem[] | undefined {
+    const template = getConfigDisplayTemplate(itemId);
+    if (!template) {
+      return undefined;
+    }
+
+    const display: ConfigDisplayItem[] = template.map(item => {
+      const displayItem: ConfigDisplayItem = {
+        displayType: item.displayType,
+        label: item.label,
+        configKey: item.configKey,
+        style: undefined,
+        validation: undefined
+      };
+
+      if (item.style) {
+        displayItem.style = {
+          backgroundColor: item.style.backgroundColor,
+          textColor: item.style.textColor,
+          borderColor: item.style.borderColor,
+          icon: item.style.icon,
+          avatar: item.style.avatar
+        };
+      }
+
+      if (item.validation) {
+        displayItem.validation = {
+          type: item.validation.type,
+          required: item.validation.required,
+          pattern: item.validation.pattern,
+          min: item.validation.min,
+          max: item.validation.max
+        };
+      }
+
+      if (config && item.configKey) {
+        const value = config[item.configKey];
+        if (value !== undefined) {
+          const displayValue = this.getDisplayValue(itemId, item.configKey, value);
+          displayItem.label = displayValue !== undefined ? displayValue : String(value);
+        }
+      }
+
+      return displayItem;
+    });
+
+    return display;
+  }
+
+  private getDefaultConfigValues(itemId: string): Record<string, Object> {
+    const config: Record<string, Object> = {};
+
+    const action = ACTION_DATA.find(a => a.id === itemId);
+    if (action && action.configs) {
+      action.configs.forEach(c => {
+        if (c.defaultValue !== undefined) {
+          config[c.key] = c.defaultValue;
+        }
+      });
+    }
+
+    const trigger = TRIGGER_DATA.find(t => t.id === itemId);
+    if (trigger && trigger.configs) {
+      trigger.configs.forEach(c => {
+        if (c.defaultValue !== undefined) {
+          config[c.key] = c.defaultValue;
+        }
+      });
+    }
+
+    const logic = LOGIC_DATA.find(l => l.id === itemId);
+    if (logic && logic.configs) {
+      logic.configs.forEach(c => {
+        if (c.defaultValue !== undefined) {
+          config[c.key] = c.defaultValue;
+        }
+      });
+    }
+
+    return config;
   }
 }

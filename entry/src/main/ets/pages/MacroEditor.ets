@@ -1,5 +1,5 @@
 import router from '@ohos.router';
-import { Workflow, WorkflowNode, WorkflowStats, TriggerType, ConfigDisplayItem } from '../models/WorkflowModels';
+import { Workflow, WorkflowNode, TriggerType, ConfigDisplayItem } from '../models/WorkflowModels';
 import { WorkflowDataManager } from '../utils/WorkflowDataManager';
 
 interface UIWorkflowItem {
@@ -16,19 +16,6 @@ interface UIWorkflowItem {
   children?: UIWorkflowItem[];
 }
 
-interface ActionItem {
-  id: string;
-  type: 'trigger' | 'action' | 'condition' | 'nested';
-  title: string;
-  icon: string;
-  iconColor: string;
-  description?: string;
-  children?: ActionItem[];
-  avatar?: string;
-  message?: string;
-  config?: Record<string, string | number | boolean>;
-  configDisplay?: ConfigDisplayItem[];
-}
 
 @Entry
 @Component
@@ -125,6 +112,20 @@ struct MacroEditor {
   convertWorkflowNodesToActionItems(nodes: WorkflowNode[]): UIWorkflowItem[] {
     const result: UIWorkflowItem[] = [];
     nodes.forEach(node => {
+      const config: Record<string, string | number | boolean> = {};
+      if (node.config) {
+        node.config.forEach((value: Object, key: string) => {
+          config[key] = value as string | number | boolean;
+        });
+      }
+
+      let configDisplay: ConfigDisplayItem[] | undefined = undefined;
+      if (node.type === 'trigger') {
+        configDisplay = this.dataManager.getTriggerConfigDisplay(node.itemId, config);
+      } else {
+        configDisplay = this.dataManager.getActionConfigDisplay(node.itemId, config);
+      }
+
       const actionItem: UIWorkflowItem = {
         id: node.id,
         type: node.type,
@@ -132,6 +133,8 @@ struct MacroEditor {
         icon: node.icon,
         iconColor: node.iconColor,
         description: node.description,
+        configDisplay: configDisplay,
+        config: config,
         children: node.children ? this.convertWorkflowNodesToActionItems(node.children) : undefined
       };
       result.push(actionItem);
@@ -786,7 +789,7 @@ struct MacroEditor {
 
           Column() {
             Row() {
-              Text(item.description || '')
+              Text(item.title || 'When')
                 .fontSize(12)
                 .fontWeight(FontWeight.Bold)
                 .fontColor('#FF9500')
@@ -795,26 +798,31 @@ struct MacroEditor {
               Blank()
 
               Button() {
-                Text(this.isConfigExpanded(item.id) ? '▲' : '▼')
-                  .fontSize(12)
-                  .fontColor('#9CA3AF')
+                Text('\u22EE')
+                  .fontSize(20)
+                  .fontColor('#D1D5DB')
               }
               .type(ButtonType.Normal)
-              .backgroundColor('#F3F4F6')
+              .backgroundColor('transparent')
               .width(28)
               .height(28)
-              .borderRadius(6)
-              .onClick(() => {
-                this.toggleConfigPanel(item.id);
-              })
             }
             .width('100%')
 
-            Text(item.title)
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#000000')
+            if (item.configDisplay && item.configDisplay.length > 0) {
+              Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+                ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
+                  this.ConfigDisplayChip(configItem, item)
+                })
+              }
               .margin({ top: 4 })
+            } else {
+              Text(item.title)
+                .fontSize(18)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#000000')
+                .margin({ top: 4 })
+            }
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
@@ -826,15 +834,11 @@ struct MacroEditor {
         .borderRadius(12)
         .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
         .border({ width: 2, color: 'rgba(255, 149, 0, 0.3)' })
-
-        if (item.configDisplay && item.configDisplay.length > 0) {
-          Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
-            ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
-              this.ConfigDisplayChip(configItem, item)
-            })
-          }
-          .margin({ top: 8 })
-        }
+        .onClick(() => {
+          router.pushUrl({
+            url: 'pages/TriggerLibrary'
+          });
+        })
 
         if (this.isConfigExpanded(item.id)) {
           this.ExpandedConfigPanel(item)

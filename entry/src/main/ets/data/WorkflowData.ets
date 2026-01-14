@@ -562,7 +562,7 @@ export const ACTION_DATA: ActionItem[] = [
 
 export const LOGIC_DATA: LogicNode[] = [
   {
-    id: 'if_else',
+    id: 'if_else', //TODO 与其他Action Id 数据类型不一致，导致解析失败，获取不到配置项
     category: LogicCategory.FLOW_CONTROL,
     type: LogicNodeType.IF_ELSE,
     name: '如果 (If / Else)',
