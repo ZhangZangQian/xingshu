@@ -14,8 +14,8 @@ const weatherStyle: ConfigDisplayStyle = {
 const scriptingStyle1: ConfigDisplayStyle = {
   backgroundColor: '#FEF3C7',
   textColor: '#D97706',
-  borderColor: '#FDE68A',
-  icon: '\u26C5'
+  borderColor: '#FDE68A'
+  // icon: '\u26C5'
 };
 
 const scriptingStyle2: ConfigDisplayStyle = {

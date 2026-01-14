@@ -68,44 +68,171 @@ export struct IndexPage {
 
   @Builder
   ShortcutsList() {
-    Scroll() {
-      Column() {
-        Row() {
-          Text('ALL SHORTCUTS')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#6B7280')
-            .letterSpacing(1)
+    if (this.shortcuts.length === 0) {
+      this.EmptyState()
+    } else {
+      Scroll() {
+        Column() {
+          Row() {
+            Text('ALL SHORTCUTS')
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#6B7280')
+              .letterSpacing(1)
 
-          Text('Select')
-            .fontSize(12)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#607AFB')
+            Text('Select')
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#607AFB')
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.SpaceBetween)
+          .padding({ top: 8, bottom: 16 })
+
+          Grid() {
+            ForEach(this.shortcuts, (item: ShortcutItem) => {
+              GridItem() {
+                this.ShortcutCard(item)
+              }
+            }, (item: ShortcutItem) => item.id.toString())
+          }
+          .columnsTemplate('1fr 1fr')
+          .columnsGap(16)
+          .rowsGap(16)
+          .width('100%')
         }
         .width('100%')
-        .justifyContent(FlexAlign.SpaceBetween)
-        .padding({ top: 8, bottom: 16 })
-
-        Grid() {
-          ForEach(this.shortcuts, (item: ShortcutItem) => {
-            GridItem() {
-              this.ShortcutCard(item)
-            }
-          }, (item: ShortcutItem) => item.id.toString())
-        }
-        .columnsTemplate('1fr 1fr')
-        .columnsGap(16)
-        .rowsGap(16)
-        .width('100%')
+        .padding({ left: 20, right: 20, top: 8, bottom: 20 })
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 8, bottom: 20 })
+      .layoutWeight(1)
+      .scrollable(ScrollDirection.Vertical)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+    }
+  }
+
+  @Builder
+  EmptyState() {
+    Column() {
+      Stack() {
+        Column() {
+          Column() {
+            Stack() {
+              Column()
+                .width('192vp')
+                .height('192vp')
+                .borderRadius('50%')
+                .backgroundColor('rgba(96, 122, 251, 0.05)')
+                .opacity(0.8)
+
+              Column() {
+                Grid() {
+                  GridItem() {
+                    Column()
+                      .width('48vp')
+                      .height('48vp')
+                      .borderRadius(12)
+                      .backgroundColor('#FB923C')
+                      .shadow({ radius: 12, color: 'rgba(251, 146, 60, 0.4)', offsetY: 4 })
+                  }
+                  GridItem() {
+                    Column()
+                      .width('40vp')
+                      .height('40vp')
+                      .borderRadius('50%')
+                      .backgroundColor('#10B981')
+                      .shadow({ radius: 12, color: 'rgba(16, 185, 129, 0.4)', offsetY: 4 })
+                  }
+                  GridItem() {
+                    Column() {
+                      Text('✨')
+                        .fontSize(28)
+                        .fontColor('#FFFFFF')
+                    }
+                    .width('56vp')
+                    .height('56vp')
+                    .borderRadius(16)
+                    .linearGradient({
+                      angle: 135,
+                      colors: [['#607AFB', 0.0], ['#4F67E0', 1.0]]
+                    })
+                    .justifyContent(FlexAlign.Center)
+                    .shadow({ radius: 16, color: 'rgba(96, 122, 251, 0.5)', offsetY: 6 })
+                  }
+                  GridItem() {
+                    Column()
+                      .width('48vp')
+                      .height('48vp')
+                      .borderRadius(12)
+                      .backgroundColor('#D946EF')
+                      .shadow({ radius: 12, color: 'rgba(217, 70, 239, 0.4)', offsetY: 4 })
+                  }
+                }
+                .columnsTemplate('1fr 1fr')
+                .rowsTemplate('1fr 1fr')
+                .columnsGap(12)
+                .rowsGap(12)
+                .width('100%')
+              }
+            }
+            .width('100%')
+            .height('100%')
+            .alignContent(Alignment.Center)
+          }
+          .width('192vp')
+          .height('192vp')
+        }
+      }
+      .width('100%')
+      .margin({ bottom: 32 })
+      .alignContent(Alignment.Center)
+
+      Text('No Shortcuts Yet')
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#111827')
+        .margin({ bottom: 12 })
+
+      Text('Create your first automation or explore the shortcuts.')
+        .fontSize(14)
+        .fontColor('#6B7280')
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+        .margin({ bottom: 32 })
+
+      Button() {
+        Row() {
+          Text('+')
+            .fontSize(20)
+            .fontColor('#FFFFFF')
+            .margin({ right: 8 })
+          Text('Create Shortcut')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+        }
+      }
+      .type(ButtonType.Normal)
+      .backgroundColor('#607AFB')
+      .borderRadius(16)
+      .padding({ left: 32, right: 32, top: 16, bottom: 16 })
+      .shadow({ radius: 16, color: 'rgba(96, 122, 251, 0.3)', offsetY: 4 })
+      .onClick(() => {
+        router.pushUrl({
+          url: 'pages/MacroEditor',
+          params: {}
+        }).catch((err: Error) => {
+          console.error('Failed to navigate:', err.message);
+        });
+      })
     }
     .width('100%')
     .layoutWeight(1)
-    .scrollable(ScrollDirection.Vertical)
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .padding({ left: 20, right: 20, top: 40 })
   }
 
   @Builder

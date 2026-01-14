@@ -73,7 +73,7 @@ struct MacroEditor {
       else if (params['action']) {
         const actionData = params['action'] as Record<string, Object>;
         const actionItem: UIWorkflowItem = {
-          id: actionData['id'] as string,
+          id: this.generateUniqueId(),
           type: actionData['type'] as 'action' | 'condition' | 'nested',
           title: actionData['title'] as string,
           icon: actionData['icon'] as string,
@@ -109,6 +109,11 @@ struct MacroEditor {
     }
   }
 
+  // 生成唯一ID
+  generateUniqueId(): string {
+    return Date.now().toString() + Math.random().toString(36).substring(2, 9);
+  }
+
   convertWorkflowNodesToActionItems(nodes: WorkflowNode[]): UIWorkflowItem[] {
     const result: UIWorkflowItem[] = [];
     nodes.forEach(node => {
@@ -127,7 +132,7 @@ struct MacroEditor {
       }
 
       const actionItem: UIWorkflowItem = {
-        id: node.id,
+        id: this.generateUniqueId(),
         type: node.type,
         title: node.title,
         icon: node.icon,
@@ -585,27 +590,41 @@ struct MacroEditor {
       .width('100%')
       .margin({ bottom: 8, top: 8 })
 
-      Column() {
+      List({ space: 0, initialIndex: 0 }) {
         ForEach(this.actions, (item: UIWorkflowItem, index: number) => {
-          if (item.type === 'condition') {
-            this.ConditionBlock(item, index)
-          } else {
+          ListItem() {
             Column() {
-              this.ActionCard(item, index)
-              
-              if (index < this.actions.length - 1) {
-                Row()
-                  .width(2)
-                  .height(12)
-                  .backgroundColor('#D1D5DB')
-                  .margin({ left: 36 })
+              if (item.type === 'condition') {
+                this.ConditionBlock(item, index)
+              } else {
+                Column() {
+                  this.ActionCard(item, index)
+
+                  if (index < this.actions.length - 1) {
+                    Row()
+                      .width(2)
+                      .height(12)
+                      .backgroundColor('#D1D5DB')
+                      .margin({ left: 36 })
+                  }
+                }
+                .width('100%')
               }
             }
             .width('100%')
           }
+        }, (item: UIWorkflowItem) => item.id)
+        .onMove((from: number, to: number) => {
+          console.info('ActionsSection onMove From: ' + from + ', To: ' + to);
+          let tmp = this.actions.splice(from, 1);
+          this.actions.splice(to, 0, tmp[0]);
+          this.actions = [...this.actions];
+          console.info('ActionsSection after move: ' + JSON.stringify(this.actions.map(a => a.id)));
         })
       }
       .width('100%')
+      .scrollBar(BarState.Off)
+      .divider({ strokeWidth: 0 })
     }
     .width('100%')
   }
@@ -810,9 +829,12 @@ struct MacroEditor {
             .width('100%')
 
             if (item.configDisplay && item.configDisplay.length > 0) {
-              Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+              Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
                 ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
-                  this.ConfigDisplayChip(configItem, item)
+                  Row() {
+                    this.ConfigDisplayChip(configItem, item)
+                  }
+                  .margin({ right: 8, bottom: 4 })
                 })
               }
               .margin({ top: 4 })
@@ -854,6 +876,13 @@ struct MacroEditor {
     Stack() {
       Column() {
         Row() {
+          Text('⋮⋮')
+            .fontSize(14)
+            .fontColor('#9CA3AF')
+            .letterSpacing(-1)
+            .padding({ left: 4, right: 4 })
+            .margin({ right: 8 })
+
           Stack() {
             Row() {
               Text(item.icon)
@@ -903,9 +932,12 @@ struct MacroEditor {
             .width('100%')
 
             if (item.configDisplay && item.configDisplay.length > 0) {
-              Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+              Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
                 ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
-                  this.ConfigDisplayChip(configItem, item)
+                  Row() {
+                    this.ConfigDisplayChip(configItem, item)
+                  }
+                  .margin({ right: 8, bottom: 4 })
                 })
               }
               .margin({ top: 8 })
@@ -990,6 +1022,13 @@ struct MacroEditor {
   ConditionBlock(item: UIWorkflowItem, index: number) {
     Column() {
       Row() {
+        Text('⋮⋮')
+          .fontSize(14)
+          .fontColor('#9CA3AF')
+          .letterSpacing(-1)
+          .padding({ left: 4, right: 4 })
+          .margin({ right: 8 })
+
         Stack() {
           Row() {
             Text(item.icon)
@@ -1040,9 +1079,12 @@ struct MacroEditor {
           .width('100%')
 
           if (item.configDisplay && item.configDisplay.length > 0) {
-            Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+            Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
               ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
-                this.ConfigDisplayChip(configItem, item)
+                Row() {
+                  this.ConfigDisplayChip(configItem, item)
+                }
+                .margin({ right: 8, bottom: 4 })
               })
             }
             .margin({ top: 8 })
@@ -1186,9 +1228,12 @@ struct MacroEditor {
         .width('100%')
 
         if (item.configDisplay && item.configDisplay.length > 0) {
-          Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+          Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
             ForEach(item.configDisplay, (configItem: ConfigDisplayItem) => {
-              this.ConfigDisplayChip(configItem, item)
+              Row() {
+                this.ConfigDisplayChip(configItem, item)
+              }
+              .margin({ right: 8, bottom: 4 })
             })
           }
           .margin({ top: 8 })

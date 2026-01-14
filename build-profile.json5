@@ -1,20 +1,20 @@
 {
   "app": {
-//    "signingConfigs": [
-//      {
-//        "name": "default",
-//        "type": "HarmonyOS",
-//        "material": {
-//          "certpath": "/Users/zhangyong/.ohos/config/default_xingshu_v2_NyXt3JZv43_cjmoN1u_Ei_BoptzLkg5U-nH9vm5bJl8=.cer",
-//          "keyAlias": "debugKey",
-//          "keyPassword": "0000001B566D900FB2F354049F9AF2811F3BB7162EE3E3541BD5B2A2983DEC70F91C3D173C1085343F9598",
-//          "profile": "/Users/zhangyong/.ohos/config/default_xingshu_v2_NyXt3JZv43_cjmoN1u_Ei_BoptzLkg5U-nH9vm5bJl8=.p7b",
-//          "signAlg": "SHA256withECDSA",
-//          "storeFile": "/Users/zhangyong/.ohos/config/default_xingshu_v2_NyXt3JZv43_cjmoN1u_Ei_BoptzLkg5U-nH9vm5bJl8=.p12",
-//          "storePassword": "0000001BF6468FA040D0EB71BDB94BC0ACD2B11136C0FB1C70FC7CBCAE3DF4864F333B814E0080D3B0F732"
-//        }
-//      }
-//    ],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/zhangyong/.ohos/config/default_xingshu_v2_NyXt3JZv43_cjmoN1u_Ei_BoptzLkg5U-nH9vm5bJl8=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B4237F6B36F2659AC57EF2EE31914AF7743882E77D84170139F4D89CBD69F06F07C42A547414E42",
+          "profile": "/Users/zhangyong/.ohos/config/default_xingshu_v2_NyXt3JZv43_cjmoN1u_Ei_BoptzLkg5U-nH9vm5bJl8=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/zhangyong/.ohos/config/default_xingshu_v2_NyXt3JZv43_cjmoN1u_Ei_BoptzLkg5U-nH9vm5bJl8=.p12",
+          "storePassword": "0000001BCE2C3DC7C78140B28F9228E2C8AC37B994DC851A667AEF661CA36F310C9AF7A16C1994E450EDE4"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",

@@ -107,7 +107,7 @@ struct ActionLibrary {
     this.updateFilteredData();
   }
 
-  addActionToEditor(id: number, title: string, description: string, icon: string, iconColor: string, type: 'action' | 'condition' | 'nested') {
+  addActionToEditor(id: number | string, title: string, description: string, icon: string, iconColor: string, type: 'action' | 'condition' | 'nested') {
     try {
       const itemId = id.toString();
       const dataManager = WorkflowDataManager.getInstance();
@@ -467,18 +467,18 @@ struct ActionLibrary {
            }
            .width('100%')
 
-           // Column({ space: 12 }) {
-           //   ForEach(this.getCategoryActions(category), (item: ActionItem) => {
-           //     this.SuggestedActionCard({
-           //       id: parseInt(item.id) || 0,
-           //       title: item.name,
-           //       description: item.description,
-           //       icon: item.icon,
-           //       iconColor: item.iconColor
-           //     })
-           //   })
-           // }
-           // .width('100%')
+           Column({ space: 12 }) {
+             ForEach(this.getCategoryActions(category), (item: ActionItem) => {
+               this.SuggestedActionCard({
+                 id: parseInt(item.id) || 0,
+                 title: item.name,
+                 description: item.description,
+                 icon: item.icon,
+                 iconColor: item.iconColor
+               })
+             })
+           }
+           .width('100%')
          }
          .width('100%')
        })
@@ -603,79 +603,79 @@ struct ActionLibrary {
     }
     .width('100%')
   }
-  //
-  // @Builder
-  // SuggestedActions() {
-  //   Column({ space: 16 }) {
-  //     Text('Suggested Actions')
-  //       .fontSize(20)
-  //       .fontWeight(FontWeight.Bold)
-  //       .fontColor('#1F2937')
-  //
-  //     Column({ space: 12 }) {
-  //       ForEach(this.suggestedActions, (item: SuggestedAction) => {
-  //         this.SuggestedActionCard(item)
-  //       })
-  //     }
-  //     .width('100%')
-  //   }
-  //   .width('100%')
-  // }
-  //
-  // @Builder
-  // SuggestedActionCard(item: SuggestedAction) {
-  //   Row() {
-  //     Row() {
-  //       Text(item.icon)
-  //         .fontSize(24)
-  //         .fontColor(item.iconColor)
-  //     }
-  //     .width(40)
-  //     .height(40)
-  //     .borderRadius(12)
-  //     .backgroundColor(item.iconColor + '1A')
-  //     .border({ width: 1, color: item.iconColor + '33' })
-  //     .justifyContent(FlexAlign.Center)
-  //
-  //     Column({ space: 4 }) {
-  //       Text(item.title)
-  //         .fontSize(14)
-  //         .fontWeight(FontWeight.Bold)
-  //         .fontColor('#1F2937')
-  //
-  //       Text(item.description)
-  //         .fontSize(12)
-  //         .fontColor('#6B7280')
-  //     }
-  //     .alignItems(HorizontalAlign.Start)
-  //     .layoutWeight(1)
-  //     .margin({ left: 16 })
-  //
-  //     Button() {
-  //       Text('+')
-  //         .fontSize(20)
-  //         .fontColor('#607AFB')
-  //     }
-  //     .type(ButtonType.Normal)
-  //     .backgroundColor('#F3F4F6')
-  //     .width(32)
-  //     .height(32)
-  //     .borderRadius(999)
-  //     .onClick(() => {
-  //       this.addActionToEditor(item.id, item.title, item.description, item.icon, item.iconColor, 'action');
-  //     })
-  //   }
-  //   .width('100%')
-  //   .padding(16)
-  //   .backgroundColor('#FFFFFF')
-  //   .borderRadius(12)
-  //   .shadow({ radius: 4, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
-  //   .border({ width: 1, color: 'rgba(0, 0, 0, 0.05)' })
-  //   .justifyContent(FlexAlign.SpaceBetween)
-  //   .onClick(() => {
-  //     this.addActionToEditor(item.id, item.title, item.description, item.icon, item.iconColor, 'action');
-  //   })
-  // }
+
+  @Builder
+  SuggestedActions() {
+    Column({ space: 16 }) {
+      Text('Suggested Actions')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1F2937')
+
+      Column({ space: 12 }) {
+        ForEach(this.suggestedActions, (item: SuggestedAction) => {
+          this.SuggestedActionCard(item)
+        })
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder
+  SuggestedActionCard(item: SuggestedAction) {
+    Row() {
+      Row() {
+        Text(item.icon)
+          .fontSize(24)
+          .fontColor(item.iconColor)
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(12)
+      .backgroundColor(item.iconColor + '1A')
+      .border({ width: 1, color: item.iconColor + '33' })
+      .justifyContent(FlexAlign.Center)
+
+      Column({ space: 4 }) {
+        Text(item.title)
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1F2937')
+
+        Text(item.description)
+          .fontSize(12)
+          .fontColor('#6B7280')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      .margin({ left: 16 })
+
+      Button() {
+        Text('+')
+          .fontSize(20)
+          .fontColor('#607AFB')
+      }
+      .type(ButtonType.Normal)
+      .backgroundColor('#F3F4F6')
+      .width(32)
+      .height(32)
+      .borderRadius(999)
+      .onClick(() => {
+        this.addActionToEditor(item.id, item.title, item.description, item.icon, item.iconColor, 'action');
+      })
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor('#FFFFFF')
+    .borderRadius(12)
+    .shadow({ radius: 4, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
+    .border({ width: 1, color: 'rgba(0, 0, 0, 0.05)' })
+    .justifyContent(FlexAlign.SpaceBetween)
+    .onClick(() => {
+      this.addActionToEditor(item.id, item.title, item.description, item.icon, item.iconColor, 'action');
+    })
+  }
 
   @Builder
   LogicNodeCard(item: LogicNode) {
@@ -717,7 +717,7 @@ struct ActionLibrary {
       .height(32)
       .borderRadius(999)
       .onClick(() => {
-        this.addActionToEditor(parseInt(item.id), item.name, item.description, item.icon, item.iconColor, 'condition');
+        this.addActionToEditor(item.id, item.name, item.description, item.icon, item.iconColor, 'condition');
       })
     }
     .width('100%')
@@ -728,7 +728,7 @@ struct ActionLibrary {
     .border({ width: 1, color: 'rgba(0, 0, 0, 0.05)' })
     .justifyContent(FlexAlign.SpaceBetween)
     .onClick(() => {
-      this.addActionToEditor(parseInt(item.id), item.name, item.description, item.icon, item.iconColor, 'condition');
+      this.addActionToEditor(item.id, item.name, item.description, item.icon, item.iconColor, 'condition');
     })
   }
 }
