@@ -192,12 +192,66 @@ export interface ConfigValidation {
   max?: number;
 }
 
+// ConfigDisplayItem 保持为 interface，因为模板数据是静态的
 export interface ConfigDisplayItem {
   displayType: 'text' | 'button' | 'tag' | 'icon-tag' | 'avatar-tag';
   label: string;
   configKey?: string;
   style?: ConfigDisplayStyle;
   validation?: ConfigValidation;
+  editorType?: ConfigEditorType;
+  optionsSource?: OptionsSource;
+  placeholder?: string;
+}
+
+// 编辑器类型
+export type ConfigEditorType =
+  | 'text'           // 文本输入
+  | 'number'         // 数字输入
+  | 'select'         // 下拉选择
+  | 'time'           // 时间选择器
+  | 'date'           // 日期选择器
+  | 'variable'       // 变量选择器（从上下文获取）
+  | 'location'       // 位置选择器
+  | 'file'           // 文件选择器
+  | 'none';          // 纯展示，不可编辑
+
+// 选项数据来源
+export interface OptionsSource {
+  type: 'static' | 'context' | 'api';
+  // static: 使用 ConfigOption[] 静态选项
+  staticOptions?: ConfigOption[];
+  // context: 从上下文获取（如前置卡片输出变量）
+  contextKey?: string;  // 如 'variables', 'outputs'
+  // api: 从接口获取（预留）
+  apiEndpoint?: string;
+}
+
+// 变量信息接口
+export interface VariableInfo {
+  id: string;
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'object';
+  icon?: string;
+  source?: string;  // 来源：'用户定义' | 'XX卡片输出'
+  value?: string | number | boolean;
+}
+
+// 多卡片动作组（如 if-else 结构）
+export interface ActionCardGroup {
+  groupId: string;
+  groupType: 'if_else' | 'repeat' | 'switch';  // 可扩展
+  cards: ActionCardDefinition[];  // 组内卡片定义
+}
+
+// 卡片定义
+export interface ActionCardDefinition {
+  cardType: 'start' | 'middle' | 'end';  // if / else / end_if
+  title: string;
+  icon: string;
+  iconColor: string;
+  configDisplay?: ConfigDisplayItem[];
+  acceptChildren?: boolean;  // 是否接受子动作
 }
 
 // export interface ConfigValidation {

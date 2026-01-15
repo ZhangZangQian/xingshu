@@ -1,8 +1,11 @@
 import router from '@ohos.router';
-import { Workflow, WorkflowNode, TriggerType, ConfigDisplayItem } from '../models/WorkflowModels';
+import { Workflow, WorkflowNode, TriggerType, ConfigDisplayItem, ConfigOption, VariableInfo } from '../models/WorkflowModels';
 import { WorkflowDataManager } from '../utils/WorkflowDataManager';
+import { OptionsSelectDialog, VariableSelectDialog, NumberInputDialog, TextInputDialog } from '../components/ConfigEditorDialogs';
 
-interface UIWorkflowItem {
+// 使用 @Observed 装饰器使嵌套属性变化可被 ArkTS 观察
+@Observed
+export class UIWorkflowItem {
   id: string;
   type: 'trigger' | 'action' | 'condition' | 'nested';
   title: string;
@@ -14,6 +17,32 @@ interface UIWorkflowItem {
   configDisplay?: ConfigDisplayItem[];
   config?: Record<string, string | number | boolean>;
   children?: UIWorkflowItem[];
+
+  constructor(
+    id: string,
+    type: 'trigger' | 'action' | 'condition' | 'nested',
+    title: string,
+    icon: string,
+    iconColor: string,
+    description?: string,
+    avatar?: string,
+    message?: string,
+    configDisplay?: ConfigDisplayItem[],
+    config?: Record<string, string | number | boolean>,
+    children?: UIWorkflowItem[]
+  ) {
+    this.id = id;
+    this.type = type;
+    this.title = title;
+    this.icon = icon;
+    this.iconColor = iconColor;
+    this.description = description;
+    this.avatar = avatar;
+    this.message = message;
+    this.configDisplay = configDisplay;
+    this.config = config;
+    this.children = children;
+  }
 }
 
 
@@ -33,6 +62,19 @@ struct MacroEditor {
   @State iconColor: string = '#607AFB';
   @State isEnabled: boolean = true;
   @State expandedConfigIds: string[] = [];
+
+  // 弹窗编辑相关状态
+  @State currentEditingItem: UIWorkflowItem | null = null;
+  @State currentEditingConfigItem: ConfigDisplayItem | null = null;
+  @State contextVariables: VariableInfo[] = [];
+  @State dialogOptions: ConfigOption[] = [];
+  @State dialogCurrentValue: string = '';
+
+  // 弹窗控制器
+  private optionsDialogController: CustomDialogController | null = null;
+  private variableDialogController: CustomDialogController | null = null;
+  private numberDialogController: CustomDialogController | null = null;
+  private textDialogController: CustomDialogController | null = null;
 
   private dataManager: WorkflowDataManager = WorkflowDataManager.getInstance();
 
@@ -57,32 +99,36 @@ struct MacroEditor {
     if (params) {
       if (params['trigger']) {
         const triggerData = params['trigger'] as Record<string, Object>;
-        this.trigger = {
-          id: triggerData['id'] as string,
-          type: 'trigger',
-          title: triggerData['title'] as string,
-          icon: triggerData['icon'] as string,
-          iconColor: triggerData['iconColor'] as string,
-          description: triggerData['description'] as string,
-          configDisplay: triggerData['configDisplay'] as ConfigDisplayItem[],
-          config: triggerData['config'] as Record<string, string | number | boolean>
-        };
+        this.trigger = new UIWorkflowItem(
+          triggerData['id'] as string,
+          'trigger',
+          triggerData['title'] as string,
+          triggerData['icon'] as string,
+          triggerData['iconColor'] as string,
+          triggerData['description'] as string,
+          undefined,
+          undefined,
+          triggerData['configDisplay'] as ConfigDisplayItem[],
+          triggerData['config'] as Record<string, string | number | boolean>
+        );
         this.updateCounts();
         console.info('[MacroEditor] Trigger received:', JSON.stringify(this.trigger));
       }
       else if (params['action']) {
         const actionData = params['action'] as Record<string, Object>;
-        const actionItem: UIWorkflowItem = {
-          id: this.generateUniqueId(),
-          type: actionData['type'] as 'action' | 'condition' | 'nested',
-          title: actionData['title'] as string,
-          icon: actionData['icon'] as string,
-          iconColor: actionData['iconColor'] as string,
-          description: actionData['description'] as string,
-          configDisplay: actionData['configDisplay'] as ConfigDisplayItem[],
-          config: actionData['config'] as Record<string, string | number | boolean>
-        };
-        this.actions = [...this.actions, actionItem];
+        const actionItem = new UIWorkflowItem(
+          this.generateUniqueId(),
+          actionData['type'] as 'action' | 'condition' | 'nested',
+          actionData['title'] as string,
+          actionData['icon'] as string,
+          actionData['iconColor'] as string,
+          actionData['description'] as string,
+          undefined,
+          undefined,
+          actionData['configDisplay'] as ConfigDisplayItem[],
+          actionData['config'] as Record<string, string | number | boolean>
+        );
+        this.actions.push(actionItem);
         this.updateCounts();
         console.info('[MacroEditor] Action received:', JSON.stringify(actionItem));
       }
@@ -131,17 +177,19 @@ struct MacroEditor {
         configDisplay = this.dataManager.getActionConfigDisplay(node.itemId, config);
       }
 
-      const actionItem: UIWorkflowItem = {
-        id: this.generateUniqueId(),
-        type: node.type,
-        title: node.title,
-        icon: node.icon,
-        iconColor: node.iconColor,
-        description: node.description,
-        configDisplay: configDisplay,
-        config: config,
-        children: node.children ? this.convertWorkflowNodesToActionItems(node.children) : undefined
-      };
+      const actionItem = new UIWorkflowItem(
+        this.generateUniqueId(),
+        node.type,
+        node.title,
+        node.icon,
+        node.iconColor,
+        node.description,
+        undefined,
+        undefined,
+        configDisplay,
+        config,
+        node.children ? this.convertWorkflowNodesToActionItems(node.children) : undefined
+      );
       result.push(actionItem);
     });
     return result;
@@ -192,17 +240,43 @@ struct MacroEditor {
   }
 
   updateConfigValue(item: UIWorkflowItem, configKey: string, newValue: string | number | boolean) {
-    if (!item.config) {
-      item.config = {};
-    }
-    item.config[configKey] = newValue;
+    // 1. 更新 config 对象 (Immutable update)
+    const newConfig = this.cloneConfig(item.config || {});
+    newConfig[configKey] = newValue;
+    item.config = newConfig; // 触发 @Observed 属性更新
 
+    // 2. 更新 configDisplay (Immutable update)
     if (item.configDisplay) {
-      const displayItem: ConfigDisplayItem | undefined = item.configDisplay.find(d => d.configKey === configKey);
-      if (displayItem) {
-        displayItem.label = this.formatDisplayValue(newValue, configKey);
+      const index = item.configDisplay.findIndex(d => d.configKey === configKey);
+      if (index !== -1) {
+        // 创建新数组
+        const newDisplayList = item.configDisplay.slice();
+        // 创建新对象替换旧对象
+        const oldItem = newDisplayList[index];
+        newDisplayList[index] = {
+          displayType: oldItem.displayType,
+          label: this.formatDisplayValue(newValue, configKey),
+          configKey: oldItem.configKey,
+          style: oldItem.style,
+          validation: oldItem.validation,
+          editorType: oldItem.editorType,
+          optionsSource: oldItem.optionsSource,
+          placeholder: oldItem.placeholder
+        };
+        item.configDisplay = newDisplayList; // 触发 @Observed 属性更新
       }
     }
+  }
+
+  // 手动拷贝 config 对象
+  cloneConfig(config: Record<string, string | number | boolean>): Record<string, string | number | boolean> {
+    const result: Record<string, string | number | boolean> = {};
+    const keys = Object.keys(config);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      result[key] = config[key];
+    }
+    return result;
   }
 
   formatDisplayValue(value: string | number | boolean, configKey?: string): string {
@@ -213,6 +287,280 @@ struct MacroEditor {
     return true;
   }
 
+  // 使用 @Observed 类后，嵌套属性变化会自动被观察
+  // 但数组需要重新赋值才能触发列表刷新
+  forceRefreshTrigger() {
+    // @Observed 类的属性变化会自动触发 UI 更新
+    // 这里通过临时置空再恢复来确保触发刷新
+    if (this.trigger) {
+      const temp = this.trigger;
+      this.trigger = null;
+      this.trigger = temp;
+    }
+  }
+
+  forceRefreshActions() {
+    // 创建新数组引用触发列表刷新
+    this.actions = this.actions.slice();
+  }
+
+  // 打开配置编辑器（根据 editorType 弹出对应弹窗）
+  openConfigEditor(item: UIWorkflowItem, configItem: ConfigDisplayItem) {
+    if (!configItem.configKey || configItem.editorType === 'none') {
+      return;
+    }
+
+    this.currentEditingItem = item;
+    this.currentEditingConfigItem = configItem;
+    const currentValue = item.config?.[configItem.configKey] || '';
+
+    switch (configItem.editorType) {
+      case 'select':
+        this.showOptionsDialog(item, configItem, String(currentValue));
+        break;
+      case 'variable':
+        this.collectContextVariables();
+        this.showVariableDialog(item, configItem);
+        break;
+      case 'number':
+        this.showNumberDialog(item, configItem, Number(currentValue) || 0);
+        break;
+      case 'text':
+        this.showTextDialog(item, configItem, String(currentValue));
+        break;
+      case 'time':
+        this.showTimeDialog(item, configItem, String(currentValue));
+        break;
+      default:
+        // 默认展开面板（兼容旧逻辑）
+        this.toggleConfigPanel(item.id);
+    }
+  }
+
+  // 收集上下文变量
+  collectContextVariables() {
+    const variables: VariableInfo[] = [];
+
+    // 1. 收集前面卡片的输出变量
+    this.actions.forEach((action, index) => {
+      if (action.id !== this.currentEditingItem?.id) {
+        // set_variable 动作的输出
+        if (action.config?.['name']) {
+          variables.push({
+            id: `var_${index}`,
+            name: action.config['name'] as string,
+            type: 'string',
+            icon: '📝',
+            source: `${action.title} 输出`
+          });
+        }
+      }
+    });
+
+    // 2. 预定义系统变量
+    variables.push(
+      { id: 'sys_time', name: '当前时间', type: 'string', icon: '🕐', source: '系统' },
+      { id: 'sys_date', name: '当前日期', type: 'string', icon: '📅', source: '系统' },
+      { id: 'sys_battery', name: '电量', type: 'number', icon: '🔋', source: '系统' },
+      { id: 'sys_location', name: '当前位置', type: 'string', icon: '📍', source: '系统' }
+    );
+
+    this.contextVariables = variables;
+  }
+
+  // 显示选项选择弹窗
+  showOptionsDialog(item: UIWorkflowItem, configItem: ConfigDisplayItem, currentValue: string) {
+    const options = configItem.optionsSource?.staticOptions || [];
+    this.dialogOptions = options;
+    this.dialogCurrentValue = currentValue;
+
+    this.optionsDialogController = new CustomDialogController({
+      builder: OptionsSelectDialog({
+        title: this.getConfigLabel(configItem),
+        options: options,
+        currentValue: currentValue,
+        onSelect: (value: string, label: string) => {
+          this.updateConfigValue(item, configItem.configKey!, value);
+          // 更新显示标签
+          if (configItem.configKey && item.configDisplay) {
+            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
+            if (displayItem) {
+              displayItem.label = label;
+            }
+          }
+          // 触发刷新
+          if (item.type === 'trigger') {
+            this.forceRefreshTrigger();
+          } else {
+            this.forceRefreshActions();
+          }
+        }
+      }),
+      alignment: DialogAlignment.Bottom,
+      customStyle: true
+    });
+    this.optionsDialogController.open();
+  }
+
+  // 显示变量选择弹窗
+  showVariableDialog(item: UIWorkflowItem, configItem: ConfigDisplayItem) {
+    this.variableDialogController = new CustomDialogController({
+      builder: VariableSelectDialog({
+        title: '选择变量',
+        variables: this.contextVariables,
+        onSelect: (variable: VariableInfo) => {
+          this.updateConfigValue(item, configItem.configKey!, variable.name);
+          // 更新显示标签
+          if (configItem.configKey && item.configDisplay) {
+            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
+            if (displayItem) {
+              displayItem.label = variable.name;
+            }
+          }
+          // 触发刷新
+          if (item.type === 'trigger') {
+            this.forceRefreshTrigger();
+          } else {
+            this.forceRefreshActions();
+          }
+        }
+      }),
+      alignment: DialogAlignment.Bottom,
+      customStyle: true
+    });
+    this.variableDialogController.open();
+  }
+
+  // 显示数字输入弹窗
+  showNumberDialog(item: UIWorkflowItem, configItem: ConfigDisplayItem, currentValue: number) {
+    this.numberDialogController = new CustomDialogController({
+      builder: NumberInputDialog({
+        title: this.getConfigLabel(configItem),
+        currentValue: currentValue,
+        min: configItem.validation?.min,
+        max: configItem.validation?.max,
+        placeholder: configItem.placeholder,
+        onConfirm: (value: number) => {
+          this.updateConfigValue(item, configItem.configKey!, value);
+          // 更新显示标签
+          if (configItem.configKey && item.configDisplay) {
+            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
+            if (displayItem) {
+              displayItem.label = String(value);
+            }
+          }
+          // 触发刷新
+          if (item.type === 'trigger') {
+            this.forceRefreshTrigger();
+          } else {
+            this.forceRefreshActions();
+          }
+        }
+      }),
+      alignment: DialogAlignment.Bottom,
+      customStyle: true
+    });
+    this.numberDialogController.open();
+  }
+
+  // 显示文本输入弹窗
+  showTextDialog(item: UIWorkflowItem, configItem: ConfigDisplayItem, currentValue: string) {
+    this.textDialogController = new CustomDialogController({
+      builder: TextInputDialog({
+        title: this.getConfigLabel(configItem),
+        currentValue: currentValue,
+        placeholder: configItem.placeholder,
+        onConfirm: (value: string) => {
+          this.updateConfigValue(item, configItem.configKey!, value);
+          // 更新显示标签
+          if (configItem.configKey && item.configDisplay) {
+            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
+            if (displayItem) {
+              displayItem.label = value || configItem.placeholder || configItem.configKey;
+            }
+          }
+          // 触发刷新
+          if (item.type === 'trigger') {
+            this.forceRefreshTrigger();
+          } else {
+            this.forceRefreshActions();
+          }
+        }
+      }),
+      alignment: DialogAlignment.Bottom,
+      customStyle: true
+    });
+    this.textDialogController.open();
+  }
+
+  // 显示时间选择弹窗（使用系统 TimePicker）
+  showTimeDialog(item: UIWorkflowItem, configItem: ConfigDisplayItem, currentValue: string) {
+    // 解析当前时间值
+    let hour = 7;
+    let minute = 0;
+    if (currentValue) {
+      const match = currentValue.match(/(\d{1,2}):(\d{2})/);
+      if (match) {
+        hour = parseInt(match[1]);
+        minute = parseInt(match[2]);
+      }
+    }
+
+    // 使用系统时间选择器
+    TimePickerDialog.show({
+      selected: new Date(2020, 1, 1, hour, minute),
+      useMilitaryTime: false,
+      onAccept: (value: TimePickerResult) => {
+        const formattedTime = `${value.hour}:${value.minute.toString().padStart(2, '0')}`;
+        const displayTime = this.formatTimeDisplay(value.hour, value.minute);
+
+        this.updateConfigValue(item, configItem.configKey!, formattedTime);
+
+        // 更新显示标签
+        if (configItem.configKey && item.configDisplay) {
+          const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
+          if (displayItem) {
+            displayItem.label = displayTime;
+          }
+        }
+
+        // 触发刷新
+        if (item.type === 'trigger') {
+          this.forceRefreshTrigger();
+        } else {
+          this.forceRefreshActions();
+        }
+      }
+    });
+  }
+
+  // 格式化时间显示
+  formatTimeDisplay(hour: number, minute: number): string {
+    const isPM = hour >= 12;
+    const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+    return `${displayHour}:${minute.toString().padStart(2, '0')} ${isPM ? 'PM' : 'AM'}`;
+  }
+
+  // 获取配置项标签
+  getConfigLabel(configItem: ConfigDisplayItem): string {
+    if (configItem.configKey) {
+      // 将 configKey 转换为友好的标签
+      const keyMap: Record<string, string> = {
+        'timeType': '时间类型',
+        'timeValue': '时间',
+        'repeat': '重复',
+        'variable': '变量',
+        'operator': '操作符',
+        'value': '值',
+        'target': '目标',
+        'action': '动作',
+        'type': '类型',
+        'location': '位置'
+      };
+      return keyMap[configItem.configKey] || configItem.configKey;
+    }
+    return '配置';
+  }
 
 
   // 判断是否显示连接线
@@ -663,7 +1011,8 @@ struct MacroEditor {
         color: configItem.style?.borderColor || '#BFDBFE'
       })
       .onClick(() => {
-        this.toggleConfigPanel(item.id);
+        // 使用弹窗式编辑器
+        this.openConfigEditor(item, configItem);
       })
     } else if (configItem.displayType === 'icon-tag') {
       Row({ space: 4 }) {
@@ -682,7 +1031,8 @@ struct MacroEditor {
       .border({ width: 1, color: configItem.style?.borderColor })
       .onClick(() => {
         if (configItem.configKey) {
-          this.toggleConfigPanel(item.id);
+          // 使用弹窗式编辑器
+          this.openConfigEditor(item, configItem);
         }
       })
     } else if (configItem.displayType === 'avatar-tag') {
@@ -709,7 +1059,8 @@ struct MacroEditor {
       .border({ width: 1, color: configItem.style?.borderColor })
       .onClick(() => {
         if (configItem.configKey) {
-          this.toggleConfigPanel(item.id);
+          // 使用弹窗式编辑器
+          this.openConfigEditor(item, configItem);
         }
       })
     }
@@ -1021,6 +1372,7 @@ struct MacroEditor {
   @Builder
   ConditionBlock(item: UIWorkflowItem, index: number) {
     Column() {
+      // 卡片1: 如果 (If)
       Row() {
         Text('⋮⋮')
           .fontSize(14)
@@ -1089,61 +1441,11 @@ struct MacroEditor {
             }
             .margin({ top: 8 })
           } else if (item.description) {
-            Column() {
-              if (item.avatar) {
-                Row() {
-                  Text(item.description.split(':')[0] + ':')
-                    .fontSize(12)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor('#6B7280')
-
-                  Row() {
-                    Text(item.avatar)
-                      .fontSize(9)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor('#166534')
-
-                    Text(item.description.split(': ')[1])
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor('#166534')
-                      .margin({ left: 4 })
-                  }
-                  .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                  .backgroundColor('#F0FDF4')
-                  .borderRadius(6)
-                  .margin({ left: 8 })
-                }
-                .margin({ top: 6 })
-              } else {
-                Text(item.description)
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor('#6B7280')
-                  .margin({ top: 6 })
-              }
-
-              if (item.message) {
-                Row() {
-                  Text('\u275D')
-                    .fontSize(14)
-                    .fontColor('#9CA3AF')
-                    .margin({ top: 2 })
-
-                  Text(item.message)
-                    .fontSize(12)
-                    .fontColor('#374151')
-                    .fontStyle(FontStyle.Italic)
-                }
-                .width('100%')
-                .padding(8)
-                .backgroundColor('#F9FAFB')
-                .borderRadius(8)
-                .border({ width: 1, color: '#F3F4F6' })
-                .margin({ top: 8 })
-              }
-            }
-            .alignItems(HorizontalAlign.Start)
+            Text(item.description)
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#6B7280')
+              .margin({ top: 6 })
           }
         }
         .layoutWeight(1)
@@ -1155,25 +1457,105 @@ struct MacroEditor {
       .backgroundColor('#FFFFFF')
       .borderRadius(12)
       .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
-      .border({ width: 1, color: '#E5E5EA' })
+      .border({ width: 2, color: 'rgba(245, 158, 11, 0.3)' })
 
       if (this.isConfigExpanded(item.id)) {
         this.ExpandedConfigPanel(item)
       }
 
+      // Then 分支：子动作（If 条件为真时执行）
       if (item.children && item.children.length > 0) {
-        Column({ space: 0 }) {
-          ForEach(item.children, (child: UIWorkflowItem, index: number) => {
+        // 连接线
+        Row()
+          .width(2)
+          .height(16)
+          .backgroundColor('#D1D5DB')
+          .margin({ left: 36 })
+
+        Column({ space: 8 }) {
+          ForEach(item.children.filter((c: UIWorkflowItem) => c.type !== 'nested'), (child: UIWorkflowItem) => {
             this.NestedActionCard(child)
           })
-
-          this.EndIfCard()
         }
         .width('100%')
-        .margin({ top: 12 })
       }
+
+      // 连接线
+      Row()
+        .width(2)
+        .height(16)
+        .backgroundColor('#D1D5DB')
+        .margin({ left: 36 })
+
+      // 卡片2: 否则 (Else)
+      this.ElseCard(item)
+
+      // Else 分支：子动作（If 条件为假时执行）
+      if (item.children && item.children.some((c: UIWorkflowItem) => c.type === 'nested')) {
+        Row()
+          .width(2)
+          .height(16)
+          .backgroundColor('#D1D5DB')
+          .margin({ left: 36 })
+
+        Column({ space: 8 }) {
+          ForEach(item.children.filter((c: UIWorkflowItem) => c.type === 'nested'), (child: UIWorkflowItem) => {
+            this.NestedActionCard(child)
+          })
+        }
+        .width('100%')
+      }
+
+      // 连接线
+      Row()
+        .width(2)
+        .height(16)
+        .backgroundColor('#D1D5DB')
+        .margin({ left: 36 })
+
+      // 卡片3: 结束 (End If)
+      this.EndIfCard()
     }
     .width('100%')
+  }
+
+  @Builder
+  ElseCard(item: UIWorkflowItem) {
+    Row() {
+      Text('⋮⋮')
+        .fontSize(14)
+        .fontColor('#9CA3AF')
+        .letterSpacing(-1)
+        .padding({ left: 4, right: 4 })
+        .margin({ right: 8 })
+
+      Row() {
+        Text('➖')
+          .fontSize(20)
+          .fontColor('#6B7280')
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(12)
+      .backgroundColor('#F3F4F6')
+      .justifyContent(FlexAlign.Center)
+
+      Column() {
+        Text('否则')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#6B7280')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 12 })
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor('#FFFFFF')
+    .borderRadius(12)
+    .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
+    .border({ width: 1, color: '#E5E5EA' })
   }
 
   @Builder

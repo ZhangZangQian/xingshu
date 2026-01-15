@@ -232,7 +232,7 @@ export struct IndexPage {
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .padding({ left: 20, right: 20, top: 40 })
+    .padding({ left: 20, right: 20 })
   }
 
   @Builder
