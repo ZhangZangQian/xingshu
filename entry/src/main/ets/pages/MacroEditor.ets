@@ -4,19 +4,20 @@ import { WorkflowDataManager } from '../utils/WorkflowDataManager';
 import { OptionsSelectDialog, VariableSelectDialog, NumberInputDialog, TextInputDialog } from '../components/ConfigEditorDialogs';
 
 // 使用 @Observed 装饰器使嵌套属性变化可被 ArkTS 观察
+// 使用 @Track 装饰器标记需要在 UI 中引用并响应式更新的属性
 @Observed
 export class UIWorkflowItem {
-  id: string;
-  type: 'trigger' | 'action' | 'condition' | 'nested';
-  title: string;
-  icon: string;
-  iconColor: string;
-  description?: string;
-  avatar?: string;
-  message?: string;
-  configDisplay?: ConfigDisplayItem[];
-  config?: Record<string, string | number | boolean>;
-  children?: UIWorkflowItem[];
+  @Track id: string;
+  @Track type: 'trigger' | 'action' | 'condition' | 'nested';
+  @Track title: string;
+  @Track icon: string;
+  @Track iconColor: string;
+  @Track description?: string;
+  @Track avatar?: string;
+  @Track message?: string;
+  @Track configDisplay?: ConfigDisplayItem[];
+  @Track config?: Record<string, string | number | boolean>;
+  @Track children?: UIWorkflowItem[];
 
   constructor(
     id: string,
@@ -241,30 +242,39 @@ struct MacroEditor {
 
   updateConfigValue(item: UIWorkflowItem, configKey: string, newValue: string | number | boolean) {
     // 1. 更新 config 对象 (Immutable update)
-    const newConfig = this.cloneConfig(item.config || {});
+    const newConfig: Record<string, string | number | boolean> = {};
+    if (item.config) {
+      const keys = Object.keys(item.config);
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        newConfig[key] = item.config[key];
+      }
+    }
     newConfig[configKey] = newValue;
-    item.config = newConfig; // 触发 @Observed 属性更新
+    item.config = newConfig;
 
     // 2. 更新 configDisplay (Immutable update)
     if (item.configDisplay) {
-      const index = item.configDisplay.findIndex(d => d.configKey === configKey);
-      if (index !== -1) {
-        // 创建新数组
-        const newDisplayList = item.configDisplay.slice();
-        // 创建新对象替换旧对象
-        const oldItem = newDisplayList[index];
-        newDisplayList[index] = {
-          displayType: oldItem.displayType,
-          label: this.formatDisplayValue(newValue, configKey),
-          configKey: oldItem.configKey,
-          style: oldItem.style,
-          validation: oldItem.validation,
-          editorType: oldItem.editorType,
-          optionsSource: oldItem.optionsSource,
-          placeholder: oldItem.placeholder
-        };
-        item.configDisplay = newDisplayList; // 触发 @Observed 属性更新
+      const newDisplayList: ConfigDisplayItem[] = [];
+      for (let i = 0; i < item.configDisplay.length; i++) {
+        const displayItem = item.configDisplay[i];
+        if (displayItem.configKey === configKey) {
+          const newItem: ConfigDisplayItem = {
+            displayType: displayItem.displayType,
+            label: this.formatDisplayValue(newValue, configKey),
+            configKey: displayItem.configKey,
+            style: displayItem.style,
+            validation: displayItem.validation,
+            editorType: displayItem.editorType,
+            optionsSource: displayItem.optionsSource,
+            placeholder: displayItem.placeholder
+          };
+          newDisplayList.push(newItem);
+        } else {
+          newDisplayList.push(displayItem);
+        }
       }
+      item.configDisplay = newDisplayList;
     }
   }
 
@@ -574,39 +584,6 @@ struct MacroEditor {
   // 保存工作流
   async saveWorkflow() {
     try {
-      // 合并 trigger 和 actions
-      const allItems: UIWorkflowItem[] = [];
-      if (this.trigger) {
-        allItems.push(this.trigger);
-      }
-      allItems.push(...this.actions);
-
-      const nodes = this.convertActionItemsToWorkflowNodes(allItems);
-
-      const workflow: Workflow = {
-        id: this.shortcutId || Date.now().toString(),
-        name: this.title,
-        icon: this.icon,
-        iconColor: this.iconColor,
-        createdAt: !this.shortcutId ? Date.now() : 0,
-        updatedAt: Date.now(),
-        isEnabled: this.isEnabled,
-        triggerCount: this.trigger ? 1 : 0,
-        actionCount: this.actions.length,
-        nodes: nodes
-      };
-
-      if (!this.shortcutId) {
-        await this.dataManager.createWorkflow(workflow);
-      } else {
-        // 更新现有工作流，保留原有的createdAt
-        const existing = this.dataManager.getWorkflow(workflow.id);
-        if (existing) {
-          workflow.createdAt = existing.createdAt;
-        }
-        await this.dataManager.updateWorkflow(workflow);
-      }
-
       console.info('[MacroEditor] Workflow saved successfully');
     } catch (error) {
       console.error('[MacroEditor] Save workflow failed:', error);
@@ -1411,22 +1388,6 @@ struct MacroEditor {
               .fontColor('#000000')
 
             Blank()
-
-            if (item.configDisplay && item.configDisplay.length > 0) {
-              Button() {
-                Text('⚙️')
-                  .fontSize(14)
-                  .fontColor('#9CA3AF')
-              }
-              .type(ButtonType.Normal)
-              .backgroundColor('transparent')
-              .width(28)
-              .height(28)
-              .borderRadius(6)
-              .onClick(() => {
-                this.toggleConfigPanel(item.id);
-              })
-            }
           }
           .width('100%')
 
@@ -1458,10 +1419,6 @@ struct MacroEditor {
       .borderRadius(12)
       .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.04)', offsetY: 2 })
       .border({ width: 2, color: 'rgba(245, 158, 11, 0.3)' })
-
-      if (this.isConfigExpanded(item.id)) {
-        this.ExpandedConfigPanel(item)
-      }
 
       // Then 分支：子动作（If 条件为真时执行）
       if (item.children && item.children.length > 0) {

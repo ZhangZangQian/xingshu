@@ -130,13 +130,8 @@ export const CONFIG_DISPLAY_TEMPLATES: Record<string, ConfigDisplayItem[]> = {
 
   'if_else': [
     {
-      displayType: 'text',
-      label: 'If',
-      editorType: 'none'
-    } as ConfigDisplayItem,
-    {
       displayType: 'icon-tag',
-      label: 'Variable',
+      label: '选择变量',
       configKey: 'variable',
       style: scriptingStyle1,
       editorType: 'variable',
@@ -148,7 +143,7 @@ export const CONFIG_DISPLAY_TEMPLATES: Record<string, ConfigDisplayItem[]> = {
     } as ConfigDisplayItem,
     {
       displayType: 'tag',
-      label: '>',
+      label: '大于',
       configKey: 'operator',
       style: scriptingStyle2,
       editorType: 'select',
