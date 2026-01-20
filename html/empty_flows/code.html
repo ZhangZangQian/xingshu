@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html class="" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>My Flows Library</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&amp;family=Space+Grotesk:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#607AFB",
+                        "background-light": "#f5f6f8",
+                        "background-dark": "#0f1323",
+                        "surface-dark": "#282c31",
+                        "surface-light": "#ffffff"
+                    },
+                    fontFamily: {
+                        display: "Space Grotesk",
+                        body: ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.5rem",
+                        lg: "1rem",
+                        xl: "1.5rem",
+                        full: "9999px"
+                    }
+                }
+            }
+        };
+    </script>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light font-body antialiased text-gray-900 h-screen flex flex-col overflow-hidden">
+<header class="flex-none px-5 pt-12 pb-2 bg-background-light z-20">
+<div class="flex items-center justify-between">
+<h1 class="font-display text-3xl font-bold tracking-tight text-gray-900">
+                My Flows
+            </h1>
+<button class="group flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary hover:text-white">
+<span class="material-symbols-outlined text-2xl font-semibold group-hover:scale-110 transition-transform">add</span>
+</button>
+</div>
+</header>
+<div class="flex-none px-5 py-3 bg-background-light z-10 sticky top-0">
+<div class="relative flex w-full items-center">
+<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="block w-full rounded-xl border-none bg-gray-200 py-3.5 pl-11 pr-4 text-sm font-medium text-gray-900 placeholder:text-gray-500 focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all shadow-inner" placeholder="Search your library..." type="text"/>
+</div>
+</div>
+<main class="flex-1 overflow-y-auto px-5 flex flex-col items-center justify-center no-scrollbar text-center pb-24">
+<div class="relative mb-8 w-48 h-48 flex items-center justify-center">
+<div class="absolute inset-0 bg-primary/5 rounded-full scale-110 animate-pulse"></div>
+<div class="relative z-10 flex items-center justify-center">
+<div class="grid grid-cols-2 gap-3 rotate-12">
+<div class="w-12 h-12 bg-orange-400 rounded-xl shadow-lg transform translate-y-2"></div>
+<div class="w-10 h-10 bg-emerald-500 rounded-full shadow-lg transform -translate-x-2"></div>
+<div class="w-14 h-14 bg-primary rounded-2xl shadow-xl flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-3xl">auto_fix_high</span>
+</div>
+<div class="w-12 h-12 bg-fuchsia-500 rounded-lg shadow-lg transform -translate-y-4"></div>
+</div>
+</div>
+</div>
+<h2 class="font-display text-2xl font-bold text-gray-900 mb-3">No Flows Yet</h2>
+<p class="text-gray-500 max-w-[280px] mb-8 leading-relaxed">
+            Create your first automation or browse the Gallery for inspiration.
+        </p>
+<button class="flex items-center gap-2 px-8 py-4 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/30 active:scale-95 transition-transform">
+<span class="material-symbols-outlined">add</span>
+<span>Create Flow</span>
+</button>
+</main>
+<nav class="flex-none bg-white/90 border-t border-gray-100 px-6 pb-8 pt-3 backdrop-blur-lg absolute bottom-0 w-full z-30">
+<div class="flex items-center justify-around">
+<a class="flex flex-col items-center gap-1 group" href="#">
+<div class="flex h-8 w-12 items-center justify-center rounded-full bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-primary fill-1" style="font-variation-settings: 'FILL' 1;">grid_view</span>
+</div>
+<span class="text-[10px] font-bold text-primary">My Flows</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<div class="flex h-8 w-12 items-center justify-center rounded-full bg-transparent transition-colors group-hover:bg-gray-100">
+<span class="material-symbols-outlined text-gray-400 group-hover:text-gray-600">photo_library</span>
+</div>
+<span class="text-[10px] font-medium text-gray-500 group-hover:text-gray-700">Gallery</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<div class="flex h-8 w-12 items-center justify-center rounded-full bg-transparent transition-colors group-hover:bg-gray-100">
+<span class="material-symbols-outlined text-gray-400 group-hover:text-gray-600">settings</span>
+</div>
+<span class="text-[10px] font-medium text-gray-500 group-hover:text-gray-700">Settings</span>
+</a>
+</div>
+</nav>
+
+</body></html>

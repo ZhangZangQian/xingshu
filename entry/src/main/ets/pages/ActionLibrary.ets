@@ -1,5 +1,5 @@
 import router from '@ohos.router';
-import { ActionItem, LogicNode } from '../models/WorkflowModels';
+import { ActionItem, LogicNode, LogicNodeType } from '../models/WorkflowModels';
 import { ACTION_DATA, LOGIC_DATA, CATEGORY_LABELS, ActionCategoryLabels, LogicCategoryLabels } from '../data/WorkflowData';
 import { getConfigDisplayTemplate } from '../data/ConfigTemplates';
 import { WorkflowDataManager } from '../utils/WorkflowDataManager';
@@ -717,7 +717,8 @@ struct ActionLibrary {
       .height(32)
       .borderRadius(999)
       .onClick(() => {
-        this.addActionToEditor(item.id, item.name, item.description, item.icon, item.iconColor, 'condition');
+        const nodeType = item.type === LogicNodeType.IF_ELSE ? 'condition' : 'action';
+        this.addActionToEditor(item.id, item.name, item.description, item.icon, item.iconColor, nodeType);
       })
     }
     .width('100%')

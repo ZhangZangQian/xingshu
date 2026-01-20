@@ -69,6 +69,19 @@ const messageStyle: ConfigDisplayStyle = {
   borderColor: '#A7F3D0'
 };
 
+const variableStyle: ConfigDisplayStyle = {
+  backgroundColor: '#ECFDF5',
+  textColor: '#059669',
+  borderColor: '#A7F3D0',
+  icon: '\uD83D\uDCDD'
+};
+
+const variableStyle2: ConfigDisplayStyle = {
+  backgroundColor: '#F3F4F6',
+  textColor: '#000000',
+  borderColor: '#E5E7EB'
+};
+
 export const CONFIG_DISPLAY_TEMPLATES: Record<string, ConfigDisplayItem[]> = {
   'time_date': [
     {
@@ -272,6 +285,40 @@ export const CONFIG_DISPLAY_TEMPLATES: Record<string, ConfigDisplayItem[]> = {
       style: scriptingStyle2,
       editorType: 'number',
       placeholder: '0-100'
+    } as ConfigDisplayItem
+  ],
+
+  'set_variable': [
+    {
+      displayType: 'icon-tag',
+      label: '变量名',
+      configKey: 'name',
+      style: variableStyle,
+      editorType: 'text',
+      placeholder: '如：myVariable'
+    } as ConfigDisplayItem,
+    {
+      displayType: 'tag',
+      label: '类型',
+      configKey: 'type',
+      style: variableStyle2,
+      editorType: 'select',
+      optionsSource: {
+        type: 'static',
+        staticOptions: [
+          { label: '文本', value: 'string' },
+          { label: '数字', value: 'number' },
+          { label: '文件路径', value: 'file' }
+        ]
+      }
+    } as ConfigDisplayItem,
+    {
+      displayType: 'button',
+      label: '输入值',
+      configKey: 'value',
+      style: scriptingStyle2,
+      editorType: 'text',
+      placeholder: '输入变量值'
     } as ConfigDisplayItem
   ]
 };

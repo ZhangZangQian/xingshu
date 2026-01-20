@@ -232,7 +232,10 @@ export class WorkflowDataManager {
         label: item.label,
         configKey: item.configKey,
         style: undefined,
-        validation: undefined
+        validation: undefined,
+        editorType: item.editorType,
+        optionsSource: item.optionsSource,
+        placeholder: item.placeholder
       };
 
       if (item.style) {
@@ -312,7 +315,10 @@ export class WorkflowDataManager {
         label: item.label,
         configKey: item.configKey,
         style: undefined,
-        validation: undefined
+        validation: undefined,
+        editorType: item.editorType,
+        optionsSource: item.optionsSource,
+        placeholder: item.placeholder
       };
 
       if (item.style) {

@@ -240,7 +240,7 @@ struct MacroEditor {
     }
   }
 
-  updateConfigValue(item: UIWorkflowItem, configKey: string, newValue: string | number | boolean) {
+  updateConfigValue(item: UIWorkflowItem, configKey: string, newValue: string | number | boolean, displayLabel?: string) {
     // 1. 更新 config 对象 (Immutable update)
     const newConfig: Record<string, string | number | boolean> = {};
     if (item.config) {
@@ -258,21 +258,37 @@ struct MacroEditor {
       const newDisplayList: ConfigDisplayItem[] = [];
       for (let i = 0; i < item.configDisplay.length; i++) {
         const displayItem = item.configDisplay[i];
+        const newItem: ConfigDisplayItem = {
+          displayType: displayItem.displayType,
+          label: displayItem.label,
+          configKey: displayItem.configKey,
+          style: displayItem.style,
+          validation: displayItem.validation,
+          editorType: displayItem.editorType,
+          optionsSource: displayItem.optionsSource,
+          placeholder: displayItem.placeholder
+        };
+
         if (displayItem.configKey === configKey) {
-          const newItem: ConfigDisplayItem = {
-            displayType: displayItem.displayType,
-            label: this.formatDisplayValue(newValue, configKey),
-            configKey: displayItem.configKey,
-            style: displayItem.style,
-            validation: displayItem.validation,
-            editorType: displayItem.editorType,
-            optionsSource: displayItem.optionsSource,
-            placeholder: displayItem.placeholder
-          };
-          newDisplayList.push(newItem);
-        } else {
-          newDisplayList.push(displayItem);
+          // 如果提供了 displayLabel，直接使用；否则从 optionsSource 中查找或转换为字符串
+          let finalDisplayLabel: string;
+          if (displayLabel !== undefined) {
+            finalDisplayLabel = displayLabel;
+          } else {
+            finalDisplayLabel = String(newValue);
+            if (displayItem.optionsSource?.type === 'static' && displayItem.optionsSource.staticOptions) {
+              const option = displayItem.optionsSource.staticOptions.find(opt => opt.value === String(newValue));
+              if (option) {
+                finalDisplayLabel = option.label;
+              }
+            } else if (displayItem.editorType === 'text' && String(newValue).trim() === '') {
+              finalDisplayLabel = displayItem.placeholder || displayItem.configKey || '';
+            }
+          }
+          newItem.label = finalDisplayLabel;
         }
+
+        newDisplayList.push(newItem);
       }
       item.configDisplay = newDisplayList;
     }
@@ -310,8 +326,22 @@ struct MacroEditor {
   }
 
   forceRefreshActions() {
-    // 创建新数组引用触发列表刷新
-    this.actions = this.actions.slice();
+    // 创建新数组和新的对象引用来强制触发 UI 更新
+    this.actions = this.actions.map(item => {
+      return new UIWorkflowItem(
+        item.id,
+        item.type,
+        item.title,
+        item.icon,
+        item.iconColor,
+        item.description,
+        item.avatar,
+        item.message,
+        item.configDisplay,
+        item.config,
+        item.children
+      );
+    });
   }
 
   // 打开配置编辑器（根据 editorType 弹出对应弹窗）
@@ -391,13 +421,6 @@ struct MacroEditor {
         currentValue: currentValue,
         onSelect: (value: string, label: string) => {
           this.updateConfigValue(item, configItem.configKey!, value);
-          // 更新显示标签
-          if (configItem.configKey && item.configDisplay) {
-            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
-            if (displayItem) {
-              displayItem.label = label;
-            }
-          }
           // 触发刷新
           if (item.type === 'trigger') {
             this.forceRefreshTrigger();
@@ -420,13 +443,6 @@ struct MacroEditor {
         variables: this.contextVariables,
         onSelect: (variable: VariableInfo) => {
           this.updateConfigValue(item, configItem.configKey!, variable.name);
-          // 更新显示标签
-          if (configItem.configKey && item.configDisplay) {
-            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
-            if (displayItem) {
-              displayItem.label = variable.name;
-            }
-          }
           // 触发刷新
           if (item.type === 'trigger') {
             this.forceRefreshTrigger();
@@ -452,13 +468,6 @@ struct MacroEditor {
         placeholder: configItem.placeholder,
         onConfirm: (value: number) => {
           this.updateConfigValue(item, configItem.configKey!, value);
-          // 更新显示标签
-          if (configItem.configKey && item.configDisplay) {
-            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
-            if (displayItem) {
-              displayItem.label = String(value);
-            }
-          }
           // 触发刷新
           if (item.type === 'trigger') {
             this.forceRefreshTrigger();
@@ -482,13 +491,6 @@ struct MacroEditor {
         placeholder: configItem.placeholder,
         onConfirm: (value: string) => {
           this.updateConfigValue(item, configItem.configKey!, value);
-          // 更新显示标签
-          if (configItem.configKey && item.configDisplay) {
-            const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
-            if (displayItem) {
-              displayItem.label = value || configItem.placeholder || configItem.configKey;
-            }
-          }
           // 触发刷新
           if (item.type === 'trigger') {
             this.forceRefreshTrigger();
@@ -524,15 +526,7 @@ struct MacroEditor {
         const formattedTime = `${value.hour}:${value.minute.toString().padStart(2, '0')}`;
         const displayTime = this.formatTimeDisplay(value.hour, value.minute);
 
-        this.updateConfigValue(item, configItem.configKey!, formattedTime);
-
-        // 更新显示标签
-        if (configItem.configKey && item.configDisplay) {
-          const displayItem = item.configDisplay.find(d => d.configKey === configItem.configKey);
-          if (displayItem) {
-            displayItem.label = displayTime;
-          }
-        }
+        this.updateConfigValue(item, configItem.configKey!, formattedTime, displayTime);
 
         // 触发刷新
         if (item.type === 'trigger') {
